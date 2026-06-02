@@ -117,19 +117,14 @@ if config_env() == :prod and mode != :agent do
         [host: host, port: external_port, scheme: "http"]
     end
 
-  # Force SSL only when Caddy terminates TLS for us. Caddy forwards
-  # X-Forwarded-Proto, which Plug.SSL uses to rewrite conn.scheme to :https —
-  # and Plug.Conn then marks every cookie secure and sends HSTS, without
-  # redirecting (Caddy's automatic_https already does the http→https bounce).
-  # Under :off the edge serves plain HTTP, so forcing SSL would redirect-loop.
-  force_ssl =
-    if tls_mode == "auto", do: [rewrite_on: [:x_forwarded_proto], hsts: true], else: false
-
   config :still, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # Secure cookies come from the endpoint's Plug.RewriteOn, which reflects
+  # Caddy's X-Forwarded-Proto into conn.scheme. We don't set `force_ssl` here —
+  # Phoenix reads it at compile time, so a runtime value aborts boot on the
+  # compile-env mismatch. See config/prod.exs.
   config :still, StillWeb.Endpoint,
     url: url_config,
-    force_ssl: force_ssl,
     # Explicit instead of Phoenix's implicit `true`: lock the LiveView socket to
     # the controller domain when set, allow any origin otherwise. /live is gated
     # by a per-session CSRF token plus SameSite=Lax session cookies.
