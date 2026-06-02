@@ -64,6 +64,91 @@ defmodule Still.CaddyBootstrapTest do
     end
   end
 
+  describe "rebuild/2 — default welcome-page eviction" do
+    # The OS Caddy package's default Caddyfile adapts to this: a file_server
+    # rooted at the package web root, on :80, named `srv0`.
+    defp welcome_server(listen) do
+      %{
+        "listen" => listen,
+        "routes" => [
+          %{
+            "handle" => [
+              %{"handler" => "vars", "root" => "/usr/share/caddy"},
+              %{"handler" => "file_server"}
+            ]
+          }
+        ]
+      }
+    end
+
+    defp servers(config), do: config["apps"]["http"]["servers"]
+
+    defp with_servers(servers) do
+      %{"apps" => %{"http" => %{"servers" => servers}}}
+    end
+
+    test "evicts the default welcome server when the still server takes its port (:auto)" do
+      current = with_servers(%{"srv0" => welcome_server([":80"])})
+      opts = base_opts(controller_domain: "still.example.com", tls_mode: :auto)
+
+      rebuilt = servers(CaddyBootstrap.rebuild(current, opts))
+
+      refute Map.has_key?(rebuilt, "srv0")
+      assert rebuilt["still"]["listen"] == [":80", ":443"]
+      assert Map.has_key?(rebuilt, "still_internal")
+    end
+
+    test "keeps the welcome server under :off — the still server is on :8080, no collision" do
+      current = with_servers(%{"srv0" => welcome_server([":80"])})
+
+      rebuilt = servers(CaddyBootstrap.rebuild(current, base_opts(tls_mode: :off)))
+
+      assert rebuilt["srv0"] == welcome_server([":80"])
+      assert rebuilt["still"]["listen"] == [":8080"]
+    end
+
+    test "keeps a welcome-shaped server that doesn't collide with a still port" do
+      current = with_servers(%{"srv0" => welcome_server([":8081"])})
+      opts = base_opts(controller_domain: "still.example.com", tls_mode: :auto)
+
+      rebuilt = servers(CaddyBootstrap.rebuild(current, opts))
+
+      assert rebuilt["srv0"] == welcome_server([":8081"])
+    end
+
+    test "leaves an operator-configured server on the same port for Caddy to reject" do
+      # Not the default welcome page — an operator's own :80 server. We don't
+      # silently delete it; Caddy rejects the load and the operator resolves it.
+      operator = %{
+        "listen" => [":80"],
+        "routes" => [
+          %{"handle" => [%{"handler" => "static_response", "body" => "mine"}]}
+        ]
+      }
+
+      current = with_servers(%{"edge" => operator})
+      opts = base_opts(controller_domain: "still.example.com", tls_mode: :auto)
+
+      rebuilt = servers(CaddyBootstrap.rebuild(current, opts))
+
+      assert rebuilt["edge"] == operator
+    end
+
+    test "only the colliding welcome server goes; a non-colliding foreign server stays" do
+      current =
+        with_servers(%{
+          "srv0" => welcome_server([":80"]),
+          "other" => %{"listen" => [":9000"]}
+        })
+
+      opts = base_opts(controller_domain: "still.example.com", tls_mode: :auto)
+      rebuilt = servers(CaddyBootstrap.rebuild(current, opts))
+
+      refute Map.has_key?(rebuilt, "srv0")
+      assert rebuilt["other"] == %{"listen" => [":9000"]}
+    end
+  end
+
   describe "rebuild/2 — controller host resolution" do
     test "uses controller_domain as the host matcher when set" do
       server =
