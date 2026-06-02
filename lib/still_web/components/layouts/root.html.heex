@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content={get_csrf_token()} />
+    <.live_title default="Still" suffix=" · Still">{assigns[:page_title]}</.live_title>
+    <link phx-track-static rel="stylesheet" href="/assets/css/app.css" />
+    <script defer phx-track-static type="text/javascript" src="/assets/js/app.js">
+    </script>
+    <script>
+      (() => {
+        const KEY = "phx:theme";
+        const mq = window.matchMedia("(prefers-color-scheme: dark)");
+        const resolve = (pref) =>
+          pref === "light" || pref === "dark" ? pref : mq.matches ? "dark" : "light";
+        const apply = (pref) =>
+          document.documentElement.setAttribute("data-theme", resolve(pref));
+        const read = () => localStorage.getItem(KEY) || "system";
+        apply(read());
+        window.addEventListener("storage", (e) => {
+          if (e.key === KEY) apply(e.newValue || "system");
+        });
+        mq.addEventListener("change", () => {
+          if (read() === "system") apply("system");
+        });
+        window.addEventListener("phx:set-theme", (e) => {
+          const pref = e.target.dataset.phxTheme;
+          if (pref === "system") localStorage.removeItem(KEY);
+          else localStorage.setItem(KEY, pref);
+          apply(pref);
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    {@inner_content}
+  </body>
+</html>

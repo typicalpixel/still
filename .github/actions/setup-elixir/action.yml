@@ -1,0 +1,10 @@
+name: Setup Elixir
+description: Sets up Elixir and Erlang/OTP based on .tool-versions.
+runs:
+  using: composite
+  steps:
+    - name: Elixir
+      uses: erlef/setup-beam@v1.24.0
+      with:
+        version-file: mise.toml
+        version-type: strict

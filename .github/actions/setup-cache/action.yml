@@ -1,0 +1,14 @@
+name: Setup Cache
+description: Sets up caching for dependencies and build artifacts.
+runs:
+  using: composite
+  steps:
+    - name: Cache deps and _build
+      uses: actions/cache@v5.0.5
+      with:
+        path: |
+          deps
+          _build
+        key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock', '.tool-versions') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-

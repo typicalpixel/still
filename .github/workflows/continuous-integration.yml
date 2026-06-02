@@ -1,0 +1,158 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MIX_ENV: test
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Setup Cache
+        uses: ./.github/actions/setup-cache
+
+      - name: Compile
+        uses: ./.github/actions/compile
+
+      - name: Run unit tests
+        run: mix test
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Setup Cache
+        uses: ./.github/actions/setup-cache
+
+      - name: Compile
+        uses: ./.github/actions/compile
+
+      - name: Install Caddy
+        run: |
+          CADDY_VERSION=2.11.2
+          curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xzC /usr/local/bin caddy
+          caddy version
+
+      - name: Run integration tests
+        run: mix test --only integration
+
+  integration-root:
+    name: Integration (root)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Setup Cache
+        uses: ./.github/actions/setup-cache
+
+      - name: Compile
+        uses: ./.github/actions/compile
+
+      - name: Install Caddy
+        run: |
+          CADDY_VERSION=2.11.2
+          curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xzC /usr/local/bin caddy
+          caddy version
+
+      - name: Run root integration tests
+        run: sudo -E env "PATH=$PATH" mix test --only integration_root
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Setup Cache
+        uses: ./.github/actions/setup-cache
+
+      - name: Compile
+        uses: ./.github/actions/compile
+
+      - name: Check Coverage
+        run: mix six --minimum-coverage 100
+
+  credo:
+    name: Credo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Setup Cache
+        uses: ./.github/actions/setup-cache
+
+      - name: Compile
+        uses: ./.github/actions/compile
+
+      - name: Credo
+        run: mix credo --strict
+
+  formatter:
+    name: Formatter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Setup Cache
+        uses: ./.github/actions/setup-cache
+
+      - name: Compile
+        uses: ./.github/actions/compile
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+  scripts:
+    name: Installer scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install Bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Run installer tests
+        run: bats test/scripts/install_test.bats

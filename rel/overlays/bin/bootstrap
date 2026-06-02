@@ -1,0 +1,60 @@
+#!/bin/sh
+set -eu
+
+# Bootstrap the first admin user for a fresh Still install. Invoked by the
+# install script after migrations run — or by operators who want to recreate
+# the admin user manually.
+#
+# Prompts for email and password on the controlling terminal (/dev/tty), with
+# password echo disabled, then passes them to the release as environment
+# variables and runs `Still.Release.create_admin_user/0`. Set STILL_ADMIN_EMAIL
+# and STILL_ADMIN_PASSWORD to skip the prompts (CI / Ansible). The env vars
+# exist only for the duration of the `still eval` call.
+
+cd -P -- "$(dirname -- "$0")"
+
+# `still eval` needs DATABASE_PATH and SECRET_KEY_BASE from the install-time
+# env files. install.sh sources them before invoking this script, but
+# operators running `sudo /opt/still/bin/bootstrap` directly need us to
+# load them ourselves. Override via $STILL_ETC if your install isn't at
+# /etc/still.
+ETC="${STILL_ETC:-/etc/still}"
+if [ -f "$ETC/still.env" ]; then
+  set -a
+  . "$ETC/still.env"
+  [ -f "$ETC/still.env.local" ] && . "$ETC/still.env.local"
+  set +a
+fi
+
+# Non-interactive path (CI / Ansible): if both are pre-set, skip the prompts.
+# Otherwise prompt on the controlling terminal (/dev/tty), not stdin, so this
+# works even when invoked by a piped installer (curl ... | sudo sh) whose stdin
+# is the script itself rather than the keyboard.
+email="${STILL_ADMIN_EMAIL:-}"
+password="${STILL_ADMIN_PASSWORD:-}"
+
+if [ -z "$email" ] || [ -z "$password" ]; then
+  if [ ! -r /dev/tty ]; then
+    echo "bootstrap: no terminal available. Set STILL_ADMIN_EMAIL and STILL_ADMIN_PASSWORD to bootstrap non-interactively, or create the first admin from the dashboard's setup page." >&2
+    exit 1
+  fi
+
+  printf "Admin email: " > /dev/tty
+  read -r email < /dev/tty
+
+  printf "Admin password: " > /dev/tty
+  stty -echo < /dev/tty
+  read -r password < /dev/tty
+  stty echo < /dev/tty
+  printf "\n" > /dev/tty
+fi
+
+if [ -z "$email" ] || [ -z "$password" ]; then
+  echo "bootstrap: email and password are required" >&2
+  exit 1
+fi
+
+STILL_ADMIN_EMAIL="$email" \
+  STILL_ADMIN_PASSWORD="$password" \
+  STILL_ADMIN_NAME="${STILL_ADMIN_NAME:-admin}" \
+  ./still eval 'Still.Release.create_admin_user()'

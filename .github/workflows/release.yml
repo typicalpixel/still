@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build release tarball
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Elixir
+        uses: ./.github/actions/setup-elixir
+
+      - name: Install Dependencies
+        run: mix deps.get --only prod
+
+      - name: Compile
+        run: mix compile --warnings-as-errors
+
+      - name: Build release
+        run: mix release --overwrite
+
+      - name: Install Bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Smoke test release tarball
+        run: bats test/scripts/release_smoke_test.bats
+
+      - name: Collect release tarball
+        id: collect
+        run: |
+          tarball=$(ls _build/prod/still-*.tar.gz)
+          name=$(basename "$tarball")
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          ls -la "$tarball"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3.0.0
+        with:
+          files: ${{ steps.collect.outputs.tarball }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
