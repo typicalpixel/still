@@ -1,6 +1,8 @@
 defmodule Still.CaddyBootstrapTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Still.Agent.CaddyManager
   alias Still.CaddyBootstrap
 
@@ -91,11 +93,13 @@ defmodule Still.CaddyBootstrapTest do
       current = with_servers(%{"srv0" => welcome_server([":80"])})
       opts = base_opts(controller_domain: "still.example.com", tls_mode: :auto)
 
-      rebuilt = servers(CaddyBootstrap.rebuild(current, opts))
+      {rebuilt, log} = with_log(fn -> servers(CaddyBootstrap.rebuild(current, opts)) end)
 
       refute Map.has_key?(rebuilt, "srv0")
       assert rebuilt["still"]["listen"] == [":80", ":443"]
       assert Map.has_key?(rebuilt, "still_internal")
+      assert log =~ ~s(removed Caddy's default welcome-page server "srv0")
+      assert log =~ "(80, 443, 9090)"
     end
 
     test "keeps the welcome server under :off — the still server is on :8080, no collision" do
@@ -142,10 +146,13 @@ defmodule Still.CaddyBootstrapTest do
         })
 
       opts = base_opts(controller_domain: "still.example.com", tls_mode: :auto)
-      rebuilt = servers(CaddyBootstrap.rebuild(current, opts))
+      {rebuilt, log} = with_log(fn -> servers(CaddyBootstrap.rebuild(current, opts)) end)
 
       refute Map.has_key?(rebuilt, "srv0")
       assert rebuilt["other"] == %{"listen" => [":9000"]}
+      # only srv0 is evicted — "other" is never logged as removed
+      assert log =~ ~s(removed Caddy's default welcome-page server "srv0")
+      refute log =~ "other"
     end
   end
 

@@ -159,14 +159,14 @@ defmodule Still.CaddyBootstrap do
   end
 
   defp removable_welcome_server?(server, owned_ports) do
-    default_welcome_server?(server) and port_collision?(server, owned_ports)
+    default_welcome_server?(server) and binds_owned_port?(server, owned_ports)
   end
 
   # The default Caddyfile's welcome page is a `file_server` rooted at the
   # package web root; after adaptation the root rides on a `vars` handler.
   # Matching that root is the surest "untouched OS default" signal — it
   # won't false-match an operator's own static site on a custom root.
-  defp default_welcome_server?(server) when is_map(server) do
+  defp default_welcome_server?(server) do
     server
     |> Map.get("routes", [])
     |> List.wrap()
@@ -178,38 +178,30 @@ defmodule Still.CaddyBootstrap do
     end)
   end
 
-  defp default_welcome_server?(_server), do: false
-
-  defp port_collision?(server, owned_ports) when is_map(server) do
+  defp binds_owned_port?(server, owned_ports) do
     server
     |> Map.get("listen", [])
     |> List.wrap()
-    |> listen_ports()
-    |> Enum.any?(&(&1 in owned_ports))
+    |> Enum.any?(&(listen_port(&1) in owned_ports))
   end
-
-  defp port_collision?(_server, _owned_ports), do: false
 
   # Reduce Caddy listen addresses to the bare port they bind. Handles the
   # shapes Still and the stock Caddyfile emit (":80", "0.0.0.0:80",
   # "localhost:2019", "udp/:443"); the port is the segment after the last
   # colon, with any "network/" prefix stripped first.
-  defp listen_ports(listen) when is_list(listen) do
+  defp listen_ports(listen) do
     listen
     |> Enum.map(&listen_port/1)
-    |> Enum.reject(&(&1 in [nil, ""]))
     |> Enum.uniq()
   end
 
-  defp listen_port(addr) when is_binary(addr) do
+  defp listen_port(addr) do
     addr
     |> String.split("/")
     |> List.last()
     |> String.split(":")
     |> List.last()
   end
-
-  defp listen_port(_addr), do: nil
 
   # Caddy's default is to manage TLS for any server whose routes match a
   # real domain name, regardless of listener port. Under tls_mode=:off
