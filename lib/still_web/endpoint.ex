@@ -38,8 +38,10 @@ defmodule StillWeb.Endpoint do
 
   plug Plug.RequestId
 
-  # Recover the real client IP from Caddy's X-Forwarded-For before anything logs
-  # or audits it — the loopback-bound endpoint otherwise only ever sees Caddy.
+  # Reflect the scheme Caddy terminated (X-Forwarded-Proto) so this request's
+  # cookies are marked secure, then restore the real client IP from
+  # X-Forwarded-For — the loopback endpoint otherwise only sees Caddy over HTTP.
+  plug Plug.RewriteOn, [:x_forwarded_proto]
   plug StillWeb.Plugs.ClientIp
 
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
