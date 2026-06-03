@@ -662,7 +662,8 @@ if [ -z "${STILL_SKIP_CADDY_SETUP:-}" ]; then
   # picks it up); we don't restart Caddy now, since its config is already
   # live this session and a restart would blip running apps. `--config` is
   # kept as a first-boot seed — rebuild preserves any non-Still servers it
-  # finds the first time it reconciles.
+  # finds, except the package's default welcome page when it sits on a port
+  # the still server needs (e.g. :80 under tls_mode=auto), which it evicts.
   caddy_dropin="${STILL_CADDY_DROPIN:-/etc/systemd/system/caddy.service.d/still.conf}"
   if systemctl cat caddy.service >/dev/null 2>&1; then
     caddy_bin="$(command -v caddy)"

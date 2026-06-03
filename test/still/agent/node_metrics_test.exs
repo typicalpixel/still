@@ -5,22 +5,28 @@ defmodule Still.Agent.NodeMetricsTest do
   alias Still.MetricsCollector
 
   describe "mem_pct_from/1" do
-    test "computes used/total percentage from :memsup data" do
+    test "uses :available_memory when present (excludes reclaimable cache)" do
+      # Cache makes free low, but most of it is reclaimable: 80% available.
+      data = [system_total_memory: 10_000, free_memory: 3_000, available_memory: 8_000]
+      assert NodeMetrics.mem_pct_from(data) == 20
+    end
+
+    test "falls back to :free_memory when :available_memory is absent" do
       data = [system_total_memory: 10_000, free_memory: 3_000]
       assert NodeMetrics.mem_pct_from(data) == 70
     end
 
     test "rounds to a whole integer" do
-      data = [system_total_memory: 3, free_memory: 2]
+      data = [system_total_memory: 3, available_memory: 2]
       # 1/3 = 33.33% → 33
       assert NodeMetrics.mem_pct_from(data) == 33
     end
 
     test "returns nil when :system_total_memory is missing" do
-      assert NodeMetrics.mem_pct_from(free_memory: 500) == nil
+      assert NodeMetrics.mem_pct_from(available_memory: 500) == nil
     end
 
-    test "returns nil when :free_memory is missing" do
+    test "returns nil when neither :available_memory nor :free_memory is present" do
       assert NodeMetrics.mem_pct_from(system_total_memory: 1_000) == nil
     end
 
@@ -30,7 +36,7 @@ defmodule Still.Agent.NodeMetricsTest do
     end
 
     test "returns nil when total is zero" do
-      assert NodeMetrics.mem_pct_from(system_total_memory: 0, free_memory: 0) == nil
+      assert NodeMetrics.mem_pct_from(system_total_memory: 0, available_memory: 0) == nil
     end
   end
 
