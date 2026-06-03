@@ -45,11 +45,17 @@ defmodule Still.Agent.NodeMetrics do
   Returns a used-memory percentage (0..100) from a
   `:memsup.get_system_memory_data/0` keyword list, or `nil` if the
   required keys are missing or total is zero.
+
+  Prefers `:available_memory` (Linux `MemAvailable`, which excludes
+  reclaimable page cache and buffers) over `:free_memory`, falling back
+  to the latter when the kernel does not report it. This matches how
+  external monitoring reports memory usage.
   """
   def mem_pct_from(data) when is_list(data) do
     with total when is_integer(total) and total > 0 <- Keyword.get(data, :system_total_memory),
-         free when is_integer(free) and free >= 0 <- Keyword.get(data, :free_memory) do
-      used = total - free
+         avail when is_integer(avail) and avail >= 0 <-
+           Keyword.get(data, :available_memory, Keyword.get(data, :free_memory)) do
+      used = total - avail
       round(used * 100 / total)
     else
       _ -> nil
