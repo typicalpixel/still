@@ -191,6 +191,8 @@ defmodule StillWeb.ApplicationComponentsTest do
         app: %{
           type: :process,
           exec_command: "bin/run",
+          exec_start_pre: "bin/run eval Migrate.run",
+          exec_stop: "bin/run stop",
           path_prefix: "/v1",
           health_check: %{path: "/health", interval_ms: 5000, deadline_ms: 3000},
           min_healthy: 2,
@@ -203,6 +205,8 @@ defmodule StillWeb.ApplicationComponentsTest do
       html = rendered_to_string(~H|<.app_config app={@app} />|)
       assert html =~ "process"
       assert html =~ "bin/run"
+      assert html =~ "bin/run eval Migrate.run"
+      assert html =~ "bin/run stop"
       assert html =~ "/v1"
       assert html =~ "/health"
       assert html =~ "local_file"
@@ -213,6 +217,8 @@ defmodule StillWeb.ApplicationComponentsTest do
         app: %{
           type: :static_site,
           exec_command: nil,
+          exec_start_pre: nil,
+          exec_stop: nil,
           path_prefix: nil,
           health_check: nil,
           min_healthy: 1,

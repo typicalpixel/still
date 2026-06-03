@@ -163,6 +163,51 @@ time. The match is the exact hostname, case-insensitive; subdomains
 (`app.still.example.com`) are fine. With no controller domain configured
 (private/IP install) nothing is reserved.
 
+#### Exec command, start/stop hooks
+
+`elixir_release` and `process` apps run as a templated systemd unit, one
+instance per blue/green slot. Releases unpack under
+`/var/lib/still/applications/<app>/`, and the active slot is reached through a
+`current_blue` / `current_green` symlink that Still flips on each deploy. The
+unit's `WorkingDirectory` is the active slot, and `PORT` is injected per slot
+(blue and green get different ports).
+
+`exec_command` is how the service starts, resolved against the active slot.
+Three shapes:
+
+- **Relative (default — use this)** — `bin/hello start`. Still expands it to the
+  active slot's absolute path for you. Pair it with the app's `env_vars` (stored
+  by Still and exposed to the process) and you never touch a path.
+- **Absolute** — write the full path yourself using systemd's `%i` slot
+  placeholder: `/var/lib/still/applications/hello/current_%i/bin/hello start`.
+  systemd substitutes `%i` with `blue`/`green` at launch. Equivalent to the
+  relative form; reach for it only when you want to control the whole line.
+- **Prefix runner** — wrap the start command in a launcher that fetches secrets
+  from a secret manager and execs your binary, so secrets are pulled at launch
+  (and rotate centrally) instead of being stored by Still. Because the line
+  starts with `/`, Still passes it through verbatim — include the slot path
+  yourself:
+
+  ```
+  /usr/bin/doppler run -- /var/lib/still/applications/hello/current_%i/bin/hello start
+  ```
+
+  [Doppler](https://www.doppler.com) is shown, but any `run -- <cmd>`-style
+  launcher works identically — e.g. [Infisical](https://infisical.com)
+  (`infisical run --`), HashiCorp Vault via
+  [envconsul](https://github.com/hashicorp/envconsul),
+  [chamber](https://github.com/segmentio/chamber) (`chamber exec --`), or
+  [sops](https://github.com/getsops/sops) (`sops exec-env`). One caveat: don't
+  let the secret manager define `PORT` — it would override Still's per-slot port
+  and break the blue/green health check.
+
+Two optional commands round out the unit, both resolved the same way (relative →
+slot path, absolute → verbatim):
+
+- `exec_start_pre` — runs before `exec_command` on every start (systemd
+  `ExecStartPre`). Typically migrations, e.g. `bin/hello eval Hello.Release.migrate`.
+- `exec_stop` — graceful shutdown command (systemd `ExecStop`), e.g. `bin/hello stop`.
+
 ### 3. Assign servers
 
 ```sh

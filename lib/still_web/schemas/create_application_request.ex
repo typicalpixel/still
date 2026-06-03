@@ -32,6 +32,16 @@ defmodule StillWeb.Schemas.CreateApplicationRequest do
         maxLength: 1000,
         description: "Required for elixir_release and process. Must be blank for static_site."
       },
+      exec_start_pre: %OpenApiSpex.Schema{
+        type: :string,
+        maxLength: 1000,
+        description: "Optional ExecStartPre command. Must be blank for static_site."
+      },
+      exec_stop: %OpenApiSpex.Schema{
+        type: :string,
+        maxLength: 1000,
+        description: "Optional ExecStop command. Must be blank for static_site."
+      },
       env_vars: %OpenApiSpex.Schema{
         type: :object,
         additionalProperties: %OpenApiSpex.Schema{type: :string}

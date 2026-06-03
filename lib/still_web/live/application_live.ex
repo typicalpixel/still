@@ -743,7 +743,13 @@ defmodule StillWeb.ApplicationLive do
     |> maybe_put_health(params)
   end
 
-  defp maybe_put_exec(attrs, %{"exec_command" => exec}), do: Map.put(attrs, "exec_command", exec)
+  defp maybe_put_exec(attrs, %{"exec_command" => exec} = params) do
+    attrs
+    |> Map.put("exec_command", exec)
+    |> Map.put("exec_start_pre", blank_to_nil(params["exec_start_pre"]))
+    |> Map.put("exec_stop", blank_to_nil(params["exec_stop"]))
+  end
+
   defp maybe_put_exec(attrs, _params), do: attrs
 
   defp maybe_put_health(attrs, %{"hc_path" => path} = params) do
