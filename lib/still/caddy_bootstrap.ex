@@ -49,12 +49,20 @@ defmodule Still.CaddyBootstrap do
   listener on its behalf, binding a port the operator may have declined.
   """
 
+  require Logger
+
   alias Still.Agent.CaddyManager
   alias Still.Caddy.Config, as: CaddyConfig
 
   @controller_route_id "still_controller"
   @catchall_route_id "still_catchall"
   @system_route_ids [@controller_route_id, @catchall_route_id]
+  @still_servers ["still", "still_internal"]
+
+  # Root the OS Caddy packages' default Caddyfile serves its welcome page
+  # from. That server (`srv0` after Caddyfile adaptation) binds :80 and is
+  # the one thing we'll evict to take a port — see drop_default_welcome_server/2.
+  @default_web_root "/usr/share/caddy"
 
   @doc """
   Reconciles the local Caddy's "still" server with the desired system
@@ -77,8 +85,18 @@ defmodule Still.CaddyBootstrap do
   replaced in place. Any other fields on the still server
   (`automatic_https`, `tls_connection_policies`, etc.) are preserved
   — we only overwrite `listen` and `routes`, and remove the deprecated
-  per-server `metrics` field. Unrelated top-level keys (`admin`, other
-  apps) are untouched.
+  per-server `metrics` field. Unrelated top-level keys (`admin`) and
+  other HTTP servers are untouched.
+
+  The one exception: the OS Caddy package's default welcome-page server
+  (a `file_server` rooted at `/usr/share/caddy`, named `srv0` after
+  Caddyfile adaptation) is removed when it binds a port the still server
+  needs — typically :80 under `tls_mode: :auto`. Caddy refuses to run two
+  servers on one listener, so on a stock box the choice is evict that
+  placeholder or fail the whole config load; we evict it and log it. A
+  server an operator configured themselves is never touched — if it
+  collides, Caddy rejects the load and the operator resolves it (free the
+  port, or install with `STILL_SKIP_CADDY_SETUP=1`).
   """
   def rebuild(current_config, opts) when is_map(current_config) and is_list(opts) do
     current_routes =
@@ -95,6 +113,8 @@ defmodule Still.CaddyBootstrap do
 
     tls_mode = Keyword.get(opts, :tls_mode, :off)
 
+    owned_ports = listen_ports(new_listen ++ [":#{internal_port}"])
+
     current_config
     |> ensure_servers_path()
     |> put_in(["apps", "http", "metrics"], metrics_config())
@@ -109,6 +129,78 @@ defmodule Still.CaddyBootstrap do
       ["apps", "http", "servers", "still_internal"],
       internal_server(internal_port, artifacts_dir)
     )
+    |> drop_default_welcome_server(owned_ports)
+  end
+
+  # Evict the OS Caddy package's default welcome-page server when it sits on
+  # a port the still server needs. On a stock box `caddy run --config
+  # /etc/caddy/Caddyfile` adapts to a `srv0` file_server on :80; under
+  # tls_mode :auto the still server also wants :80, and Caddy rejects the
+  # whole config rather than run two servers on one listener. We only ever
+  # remove that recognizable placeholder — a server the operator configured
+  # themselves is left for Caddy to reject so they resolve it deliberately.
+  defp drop_default_welcome_server(config, owned_ports) do
+    update_in(config, ["apps", "http", "servers"], fn servers ->
+      {kept, dropped} =
+        Enum.split_with(servers, fn {name, server} ->
+          name in @still_servers or not removable_welcome_server?(server, owned_ports)
+        end)
+
+      Enum.each(dropped, fn {name, _server} ->
+        Logger.warning(
+          "Still.CaddyBootstrap: removed Caddy's default welcome-page server " <>
+            "#{inspect(name)} — it bound a port the still server needs " <>
+            "(#{Enum.join(owned_ports, ", ")})"
+        )
+      end)
+
+      Map.new(kept)
+    end)
+  end
+
+  defp removable_welcome_server?(server, owned_ports) do
+    default_welcome_server?(server) and binds_owned_port?(server, owned_ports)
+  end
+
+  # The default Caddyfile's welcome page is a `file_server` rooted at the
+  # package web root; after adaptation the root rides on a `vars` handler.
+  # Matching that root is the surest "untouched OS default" signal — it
+  # won't false-match an operator's own static site on a custom root.
+  defp default_welcome_server?(server) do
+    server
+    |> Map.get("routes", [])
+    |> List.wrap()
+    |> Enum.any?(fn route ->
+      route
+      |> Map.get("handle", [])
+      |> List.wrap()
+      |> Enum.any?(&(&1["root"] == @default_web_root))
+    end)
+  end
+
+  defp binds_owned_port?(server, owned_ports) do
+    server
+    |> Map.get("listen", [])
+    |> List.wrap()
+    |> Enum.any?(&(listen_port(&1) in owned_ports))
+  end
+
+  # Reduce Caddy listen addresses to the bare port they bind. Handles the
+  # shapes Still and the stock Caddyfile emit (":80", "0.0.0.0:80",
+  # "localhost:2019", "udp/:443"); the port is the segment after the last
+  # colon, with any "network/" prefix stripped first.
+  defp listen_ports(listen) do
+    listen
+    |> Enum.map(&listen_port/1)
+    |> Enum.uniq()
+  end
+
+  defp listen_port(addr) do
+    addr
+    |> String.split("/")
+    |> List.last()
+    |> String.split(":")
+    |> List.last()
   end
 
   # Caddy's default is to manage TLS for any server whose routes match a
