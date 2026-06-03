@@ -9,7 +9,7 @@ credo/public_function_documentation.ex collect_defs 4bd7722b
 credo/public_function_documentation.ex db794f25
 credo/public_function_documentation.ex glob_matches? 951a396b
 lib/still/agent/deployment_manager.ex 4058b043
-lib/still/agent/deployment_manager.ex 5a074940
+lib/still/agent/deployment_manager.ex dcd71590
 lib/still/agent/deployment_manager.ex read_current_state 15a90428
 lib/still/agent/node_connector.ex init 650143be
 lib/still/agent/node_metrics.ex 96e7c006

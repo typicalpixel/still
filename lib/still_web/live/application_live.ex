@@ -77,6 +77,9 @@ defmodule StillWeb.ApplicationLive do
           version {common_version(@status)}<span :if={@app.domain}> · <span class="mono">{@app.domain}</span></span> · artifact {@app.artifact_source.type}
         </:subtitle>
         <:actions>
+          <span :if={not @has_servers} class="mr-1 text-[12.5px] text-paper-500 dark:text-ink-300">
+            No servers assigned — assign one to enable these actions.
+          </span>
           <button
             :if={@can_deploy and @app.maintenance}
             type="button"
@@ -90,13 +93,26 @@ defmodule StillWeb.ApplicationLive do
             type="button"
             class="btn btn-sm"
             phx-click="open_maintenance"
+            disabled={not @has_servers}
           >
             Maintenance
           </button>
-          <button :if={@can_rollback} type="button" class="btn btn-sm" phx-click="open_rollback">
+          <button
+            :if={@can_rollback}
+            type="button"
+            class="btn btn-sm"
+            phx-click="open_rollback"
+            disabled={not @rollback_available}
+          >
             Roll back
           </button>
-          <button :if={@can_deploy} type="button" class="btn btn-sm btn-primary" phx-click="open_deploy">
+          <button
+            :if={@can_deploy}
+            type="button"
+            class="btn btn-sm btn-primary"
+            phx-click="open_deploy"
+            disabled={not @has_servers}
+          >
             Deploy
           </button>
         </:actions>
@@ -632,10 +648,16 @@ defmodule StillWeb.ApplicationLive do
           Map.new(Applications.list_application_servers(app), &{&1.server_id, &1.id})
 
         deployments = Deployments.list_deployments(%{application: app.name, limit: 20})
+        has_servers = status.assigned != []
 
         socket
         |> assign(:app, app)
         |> assign(:status, status)
+        |> assign(:has_servers, has_servers)
+        |> assign(
+          :rollback_available,
+          has_servers and Deployments.get_rollback_target(app) != nil
+        )
         |> assign(:health, row_health(status))
         |> assign(:fleet, build_fleet(status, servers_by_id, assignment_ids))
         |> assign(:eligible_servers, eligible_servers(servers, status))
