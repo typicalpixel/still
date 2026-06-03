@@ -70,12 +70,17 @@ defmodule Still.Integration.ElixirReleaseExecLifecycleTest do
     assert {:ok, "0.0.1-a"} = DeploymentManager.deploy(spec_a)
     assert fetch_body(caddy.http_port, "/") =~ "vA"
     assert File.read_link!(Path.join(app_dir, "current_blue")) =~ "releases/0.0.1-a"
+    assert slot_env(app_dir, "blue") =~ "STILL_RELEASE_VERSION=0.0.1-a"
 
     # Second deploy flips to green with the *same* templated unit: `%i`→`green`,
     # `current_green` → releases/0.0.1-b. Confirms `current_%i` tracks the slot.
     assert {:ok, "0.0.1-b"} = DeploymentManager.deploy(spec_b)
     assert fetch_body(caddy.http_port, "/") =~ "vB"
     assert File.read_link!(Path.join(app_dir, "current_green")) =~ "releases/0.0.1-b"
+    assert slot_env(app_dir, "green") =~ "STILL_RELEASE_VERSION=0.0.1-b"
+    # The previous slot's env file is untouched, so blue still reports its own
+    # release — each slot's version stays consistent with the release on disk.
+    assert slot_env(app_dir, "blue") =~ "STILL_RELEASE_VERSION=0.0.1-a"
 
     content = File.read!("/etc/systemd/system/#{@application}@.service")
     assert content =~ expected_exec_start
@@ -106,5 +111,9 @@ defmodule Still.Integration.ElixirReleaseExecLifecycleTest do
   defp fetch_body(http_port, path) do
     %{status: 200, body: body} = Req.get!("http://localhost:#{http_port}#{path}", retry: false)
     body
+  end
+
+  defp slot_env(app_dir, slot) do
+    File.read!(Path.join([app_dir, "slots", "#{slot}.env"]))
   end
 end

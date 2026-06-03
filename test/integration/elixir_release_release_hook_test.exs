@@ -33,7 +33,7 @@ defmodule Still.Integration.ElixirReleaseReleaseHookTest do
           script: """
           set -eu
           test -x "$STILL_RELEASE_DIR/bin/elixir_release"
-          echo "release=$STILL_VERSION slot=$STILL_TARGET_SLOT" > #{marker}
+          echo "release=$STILL_RELEASE_VERSION slot=$STILL_TARGET_SLOT" > #{marker}
           """,
           timeout_ms: 10_000
         }
