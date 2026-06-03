@@ -124,7 +124,8 @@ defmodule StillWeb.ApplicationLiveTest do
     end
 
     test "enters maintenance with a message, shows the banner, then exits", %{conn: conn} do
-      application_fixture(%{name: "api"})
+      app = application_fixture(%{name: "api"})
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server_fixture(%{name: "s1"}))
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 
       lv |> element("button", "Maintenance") |> render_click()
@@ -146,7 +147,8 @@ defmodule StillWeb.ApplicationLiveTest do
     end
 
     test "cancels the maintenance dialog without changing state", %{conn: conn} do
-      application_fixture(%{name: "api"})
+      app = application_fixture(%{name: "api"})
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server_fixture(%{name: "s1"}))
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 
       lv |> element("button", "Maintenance") |> render_click()
@@ -156,7 +158,8 @@ defmodule StillWeb.ApplicationLiveTest do
     end
 
     test "shows an error when the maintenance message is too long", %{conn: conn} do
-      application_fixture(%{name: "api"})
+      app = application_fixture(%{name: "api"})
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server_fixture(%{name: "s1"}))
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 
       lv |> element("button", "Maintenance") |> render_click()
@@ -585,12 +588,23 @@ defmodule StillWeb.ApplicationLiveTest do
       assert_receive {:deployment_complete, _id, _status}, 2_000
     end
 
-    test "requires a server before deploying", %{conn: conn} do
+    test "disables the action buttons and explains why when no server is assigned", %{conn: conn} do
+      application_fixture(%{name: "api"})
+
+      {:ok, lv, html} = live(conn, ~p"/applications/api")
+
+      assert html =~ "No servers assigned"
+      assert has_element?(lv, "button[disabled]", "Deploy")
+      assert has_element?(lv, "button[disabled]", "Maintenance")
+      assert has_element?(lv, "button[disabled]", "Roll back")
+    end
+
+    test "rejects a deploy submitted without a server", %{conn: conn} do
       application_fixture(%{name: "api"})
 
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 
-      lv |> element("button", "Deploy") |> render_click()
+      render_hook(lv, "open_deploy", %{})
 
       html =
         lv
@@ -633,19 +647,29 @@ defmodule StillWeb.ApplicationLiveTest do
       assert_receive {:deployment_complete, _id, _status}, 2_000
     end
 
+    test "disables roll back when there is no rollback target", %{conn: conn} do
+      assigned_app("api")
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/api")
+
+      assert has_element?(lv, "button[disabled]", "Roll back")
+    end
+
     test "rejects a rollback with no target", %{conn: conn} do
       assigned_app("api")
 
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 
-      lv |> element("button", "Roll back") |> render_click()
+      render_hook(lv, "open_rollback", %{})
       html = lv |> element("#rollback button", "Roll back") |> render_click()
 
       assert html =~ "No previous successful version"
     end
 
     test "opens then cancels the deploy and rollback dialogs", %{conn: conn} do
-      application_fixture(%{name: "api"})
+      app = assigned_app("api")
+      app |> deployment_fixture(%{version: "1.0.0"}) |> Deployments.complete_deployment!()
+      app |> deployment_fixture(%{version: "2.0.0"}) |> Deployments.complete_deployment!()
 
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 

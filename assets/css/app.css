@@ -199,6 +199,11 @@ body {
   font-feature-settings: "ss02", "cv01";
 }
 
+.font-mono {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
 .hairline {
   border-color: var(--line);
 }

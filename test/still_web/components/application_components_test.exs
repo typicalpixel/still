@@ -46,8 +46,12 @@ defmodule StillWeb.ApplicationComponentsTest do
                :unhealthy
     end
 
-    test "no-probe apps read na (empty), na (all live), degraded, unhealthy" do
-      assert row_health(entry([])) == :na
+    test "apps with no successful deploy read undeployed" do
+      assert row_health(entry([])) == :undeployed
+      assert row_health(entry([%{connected: true}])) == :undeployed
+    end
+
+    test "no-probe deployed apps read na (all live), degraded, unhealthy" do
       assert row_health(entry([%{connected: true, current: "1", desired: "1"}])) == :na
 
       assert row_health(
@@ -93,13 +97,15 @@ defmodule StillWeb.ApplicationComponentsTest do
     test "health_dot maps a row health to a tone" do
       assert health_dot(:healthy) == :healthy
       assert health_dot(:na) == :healthy
+      assert health_dot(:undeployed) == :neutral
       assert health_dot(:degraded) == :warn
       assert health_dot(:unhealthy) == :danger
       assert health_dot(:other) == :neutral
     end
 
-    test "row_health_label reads na as running" do
+    test "row_health_label reads na as running, undeployed as not deployed" do
       assert row_health_label(:na) == "running"
+      assert row_health_label(:undeployed) == "not deployed"
       assert row_health_label(:healthy) == "healthy"
     end
 

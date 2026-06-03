@@ -204,13 +204,14 @@ defmodule StillWeb.ApplicationComponents do
     ~H"""
     <div
       :if={@entries != []}
-      class="hairline divide-y divide-paper-200 rounded-lg border dark:divide-ink-700"
+      class="hairline grid grid-cols-[max-content_1fr] gap-x-4 divide-y divide-paper-200 rounded-lg border dark:divide-ink-700"
     >
-      <div :for={{key, value} <- @entries} class="flex items-baseline gap-4 px-4 py-2 text-[13px]">
-        <span class="shrink-0 font-mono text-paper-800 dark:text-ink-50">{key}</span>
-        <span class="flex-1 truncate font-mono text-paper-500 dark:text-ink-300" title={value}>
-          {value}
-        </span>
+      <div
+        :for={{key, value} <- @entries}
+        class="col-span-2 grid grid-cols-subgrid items-baseline px-4 py-2 text-[13px]"
+      >
+        <span class="font-mono text-paper-800 dark:text-ink-50">{key}</span>
+        <span class="min-w-0 truncate font-mono text-paper-500 dark:text-ink-300" title={value}>{value}</span>
       </div>
     </div>
     <p :if={@entries == []} class="text-[13px] text-paper-500 italic dark:text-ink-300">
@@ -280,17 +281,19 @@ defmodule StillWeb.ApplicationComponents do
     }
   end
 
-  @doc "Row health for an application: `:healthy`, `:degraded`, `:unhealthy`, or `:na`."
+  @doc "Row health for an application: `:healthy`, `:degraded`, `:unhealthy`, `:na`, or `:undeployed`."
   def row_health(entry) when is_map(entry) do
     slots = slots(entry)
     min = entry.application.min_healthy
 
-    if health_checked?(slots) do
-      probed_health(slots, min)
-    else
-      inferred_health(slots, min)
+    cond do
+      not deployed?(slots) -> :undeployed
+      health_checked?(slots) -> probed_health(slots, min)
+      true -> inferred_health(slots, min)
     end
   end
+
+  defp deployed?(slots), do: Enum.any?(slots, &(&1.desired_version != nil))
 
   defp probed_health(slots, min) do
     healthy = Enum.count(slots, &(&1.health == :healthy))
@@ -301,8 +304,6 @@ defmodule StillWeb.ApplicationComponents do
       true -> :unhealthy
     end
   end
-
-  defp inferred_health([], _min), do: :na
 
   defp inferred_health(slots, min) do
     live = Enum.count(slots, &live_slot?/1)
@@ -328,12 +329,14 @@ defmodule StillWeb.ApplicationComponents do
   @doc "Maps a row health to a `status_dot` tone."
   def health_dot(:healthy), do: :healthy
   def health_dot(:na), do: :healthy
+  def health_dot(:undeployed), do: :neutral
   def health_dot(:degraded), do: :warn
   def health_dot(:unhealthy), do: :danger
   def health_dot(_other), do: :neutral
 
-  @doc "Human label for a row health (`:na` reads as \"running\")."
+  @doc ~S|Human label for a row health (`:na` reads as "running", `:undeployed` as "not deployed").|
   def row_health_label(:na), do: "running"
+  def row_health_label(:undeployed), do: "not deployed"
   def row_health_label(health) when is_atom(health), do: to_string(health)
 
   @doc "Tailwind text color tinting the host count to match the row's health."
