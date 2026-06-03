@@ -211,6 +211,17 @@ defmodule Still.Applications.ApplicationTest do
 
       assert "value for FOO must not contain newlines or null bytes" in errors_on(changeset).env_vars
     end
+
+    test "normalizes keys to uppercase-with-underscores" do
+      changeset =
+        Application.creation_changeset(
+          %Application{},
+          valid_elixir_release_attrs(%{env_vars: %{"database-url" => "x", "Mix.Env" => "prod"}})
+        )
+
+      assert changeset.valid?
+      assert get_change(changeset, :env_vars) == %{"DATABASE_URL" => "x", "MIX_ENV" => "prod"}
+    end
   end
 
   describe "creation_changeset/2 — type-conditional rules" do
@@ -305,6 +316,13 @@ defmodule Still.Applications.ApplicationTest do
       assert get_change(changeset, :exec_command) == "bin/new start"
       assert get_change(changeset, :env_vars) == %{"FOO" => "bar"}
       assert get_change(changeset, :min_healthy) == 2
+    end
+
+    test "normalizes env var keys", %{app: app} do
+      changeset = Application.update_changeset(app, %{env_vars: %{"database-url" => "x"}})
+
+      assert changeset.valid?
+      assert get_change(changeset, :env_vars) == %{"DATABASE_URL" => "x"}
     end
 
     test "ignores attempts to change name and type", %{app: app} do

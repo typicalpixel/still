@@ -15,6 +15,7 @@ defmodule StillWeb.ApplicationsLive do
   alias Still.Deployments
   alias Still.Events
   alias Still.Status
+  alias StillWeb.EnvRows
 
   @doc "Mounts the applications list and subscribes to live topics."
   @impl true
@@ -33,6 +34,7 @@ defmodule StillWeb.ApplicationsLive do
      |> assign(:create_type, "elixir_release")
      |> assign(:create_error, nil)
      |> assign(:create_form, create_form())
+     |> assign(:env_rows, [])
      |> load_apps()}
   end
 
@@ -62,6 +64,7 @@ defmodule StillWeb.ApplicationsLive do
         show={@create_open}
         form={@create_form}
         type={@create_type}
+        env_rows={@env_rows}
         error={@create_error}
       />
     </Layouts.app>
@@ -91,7 +94,8 @@ defmodule StillWeb.ApplicationsLive do
        |> assign(:create_open, true)
        |> assign(:create_type, "elixir_release")
        |> assign(:create_error, nil)
-       |> assign(:create_form, create_form())}
+       |> assign(:create_form, create_form())
+       |> assign(:env_rows, [])}
     else
       {:noreply, put_flash(socket, :error, "Admin permission required.")}
     end
@@ -108,29 +112,64 @@ defmodule StillWeb.ApplicationsLive do
     end
   end
 
-  def handle_event("create_app", %{"app" => params}, socket) do
+  def handle_event("validate_create", params, socket) do
     if authorized?(socket, :admin) do
-      create_app(socket, params)
+      {:noreply, assign(socket, :env_rows, EnvRows.from_params(Map.get(params, "env", %{})))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("add_env_row", _params, socket) do
+    if authorized?(socket, :admin) do
+      {:noreply, update(socket, :env_rows, &(&1 ++ [%{key: "", value: ""}]))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("remove_env_row", %{"index" => index}, socket) do
+    if authorized?(socket, :admin) do
+      {:noreply, update(socket, :env_rows, &List.delete_at(&1, String.to_integer(index)))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("create_app", %{"app" => params} = all, socket) do
+    if authorized?(socket, :admin) do
+      create_app(socket, params, EnvRows.from_params(Map.get(all, "env", %{})))
     else
       {:noreply, put_flash(socket, :error, "Admin permission required.")}
     end
   end
 
-  defp create_app(socket, params) do
-    attrs = create_attrs(params, socket.assigns.create_type)
+  defp create_app(socket, params, rows) do
+    case EnvRows.to_env_vars(rows) do
+      {:error, message} ->
+        {:noreply, socket |> assign(:env_rows, rows) |> assign(:create_error, message)}
 
-    case Applications.create_application(Actor.from_scope(socket.assigns.current_scope), attrs) do
-      {:ok, app} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{app.name} created")
-         |> push_navigate(to: ~p"/applications/#{app.name}")}
+      {:ok, env_vars} ->
+        attrs =
+          params |> create_attrs(socket.assigns.create_type) |> Map.put("env_vars", env_vars)
 
-      {:error, changeset} ->
-        {:noreply,
-         socket
-         |> assign(:create_form, to_form(params, as: :app))
-         |> assign(:create_error, humanize_changeset(changeset))}
+        case Applications.create_application(
+               Actor.from_scope(socket.assigns.current_scope),
+               attrs
+             ) do
+          {:ok, app} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "#{app.name} created")
+             |> push_navigate(to: ~p"/applications/#{app.name}")}
+
+          {:error, changeset} ->
+            {:noreply,
+             socket
+             |> assign(:create_form, to_form(params, as: :app))
+             |> assign(:env_rows, rows)
+             |> assign(:create_error, humanize_changeset(changeset))}
+        end
     end
   end
 

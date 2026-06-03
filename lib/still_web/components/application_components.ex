@@ -385,6 +385,7 @@ defmodule StillWeb.ApplicationComponents do
   attr :show, :boolean, required: true
   attr :form, :any, required: true
   attr :type, :string, required: true
+  attr :env_rows, :list, required: true
   attr :error, :string, default: nil
 
   def application_create_dialog(assigns) do
@@ -392,7 +393,13 @@ defmodule StillWeb.ApplicationComponents do
     <.modal id="create-app" show={@show} on_cancel="close_create">
       <:title>Create an application</:title>
 
-      <.form for={@form} id="create-app-form" phx-submit="create_app" class="space-y-3">
+      <.form
+        for={@form}
+        id="create-app-form"
+        phx-change="validate_create"
+        phx-submit="create_app"
+        class="space-y-3"
+      >
         <p class="text-[12.5px] text-paper-500 dark:text-ink-300">
           Name and type are immutable after creation.
         </p>
@@ -463,6 +470,16 @@ defmodule StillWeb.ApplicationComponents do
               <.input field={@form[:hc_deadline]} type="number" min="1" label="Deadline (ms)" />
             </div>
           </div>
+        </fieldset>
+
+        <fieldset class="hairline rounded-md border p-3">
+          <legend class="px-1 text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300">
+            Environment
+          </legend>
+          <p class="mb-2 text-[12px] text-paper-500 dark:text-ink-300">
+            Variables the app needs at first boot — a database URL, secret key base, and so on.
+          </p>
+          <.env_var_rows rows={@env_rows} />
         </fieldset>
 
         <p :if={@error} class="text-[12px] text-rust-700 dark:text-rust-300">{@error}</p>
@@ -651,6 +668,55 @@ defmodule StillWeb.ApplicationComponents do
     """
   end
 
+  @doc """
+  The key/value env-var row list shared by the create and edit dialogs. Keys
+  are normalized to uppercase-with-underscores as you type. Requires
+  `add_env_row` and `remove_env_row` handlers on the LiveView.
+  """
+  attr :rows, :list, required: true
+
+  def env_var_rows(assigns) do
+    ~H"""
+    <div :if={@rows != []} class="space-y-2">
+      <div
+        :for={{row, index} <- Enum.with_index(@rows)}
+        class="grid grid-cols-[1fr_1.4fr_auto] items-center gap-2"
+      >
+        <input
+          id={"env-key-#{index}"}
+          name={"env[#{index}][key]"}
+          value={row.key}
+          placeholder="KEY"
+          phx-hook="EnvKey"
+          class="input input-bordered input-sm w-full font-mono"
+        />
+        <input
+          name={"env[#{index}][value]"}
+          value={row.value}
+          placeholder="value"
+          class="input input-bordered input-sm w-full font-mono"
+        />
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          phx-click="remove_env_row"
+          phx-value-index={index}
+          aria-label="Remove row"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+    <p :if={@rows == []} class="text-[13px] text-paper-500 italic dark:text-ink-300">
+      No variables. Add one below.
+    </p>
+
+    <button type="button" class="btn btn-ghost btn-sm" phx-click="add_env_row">
+      + Add variable
+    </button>
+    """
+  end
+
   @doc "The environment-variables editor — a key/value row list. Saving replaces the whole set."
   attr :show, :boolean, required: true
   attr :app_name, :string, required: true
@@ -667,39 +733,7 @@ defmodule StillWeb.ApplicationComponents do
           Saving replaces the whole set — remove every row to clear all variables.
         </p>
 
-        <div :if={@rows != []} class="space-y-2">
-          <div
-            :for={{row, index} <- Enum.with_index(@rows)}
-            class="grid grid-cols-[1fr_1.4fr_auto] items-center gap-2"
-          >
-            <input
-              name={"env[#{index}][key]"}
-              value={row.key}
-              placeholder="KEY"
-              class="input input-bordered input-sm w-full font-mono"
-            />
-            <input
-              name={"env[#{index}][value]"}
-              value={row.value}
-              placeholder="value"
-              class="input input-bordered input-sm w-full font-mono"
-            />
-            <button
-              type="button"
-              class="btn btn-ghost btn-sm"
-              phx-click="remove_env_row"
-              phx-value-index={index}
-              aria-label="Remove row"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-        <p :if={@rows == []} class="text-[13px] text-paper-500 italic dark:text-ink-300">No variables. Add one below.</p>
-
-        <button type="button" class="btn btn-ghost btn-sm" phx-click="add_env_row">
-          + Add variable
-        </button>
+        <.env_var_rows rows={@rows} />
 
         <p :if={@error} class="text-xs text-rust-700 dark:text-rust-300">{@error}</p>
 

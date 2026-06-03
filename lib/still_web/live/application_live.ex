@@ -24,6 +24,7 @@ defmodule StillWeb.ApplicationLive do
   alias Still.Fleet
   alias Still.Orchestrator
   alias Still.Status
+  alias StillWeb.EnvRows
 
   @doc "Mounts the application detail for the given name and subscribes to live topics."
   @impl true
@@ -353,7 +354,7 @@ defmodule StillWeb.ApplicationLive do
     do:
       require_admin(
         socket,
-        &{:noreply, assign(&1, :env_rows, rows_from_params(Map.get(params, "env", %{})))}
+        &{:noreply, assign(&1, :env_rows, EnvRows.from_params(Map.get(params, "env", %{})))}
       )
 
   def handle_event("save_env", params, socket),
@@ -515,27 +516,18 @@ defmodule StillWeb.ApplicationLive do
   end
 
   defp open_env(socket) do
-    rows =
-      socket.assigns.app.env_vars
-      |> Enum.sort_by(&elem(&1, 0))
-      |> Enum.map(fn {key, value} -> %{key: key, value: value} end)
+    rows = EnvRows.to_rows(socket.assigns.app.env_vars)
 
     {:noreply,
      socket |> assign(:env_open, true) |> assign(:env_rows, rows) |> assign(:env_error, nil)}
   end
 
   defp validate_and_save_env(socket, params) do
-    rows = rows_from_params(Map.get(params, "env", %{}))
+    rows = EnvRows.from_params(Map.get(params, "env", %{}))
 
-    cond do
-      Enum.any?(rows, &(&1.key == "" and &1.value != "")) ->
-        {:noreply, assign(socket, :env_error, "Every value needs a key.")}
-
-      duplicate_keys?(rows) ->
-        {:noreply, assign(socket, :env_error, "Duplicate keys aren't allowed.")}
-
-      true ->
-        save_env(socket, rows)
+    case EnvRows.to_env_vars(rows) do
+      {:ok, env} -> save_env(socket, env)
+      {:error, message} -> {:noreply, assign(socket, :env_error, message)}
     end
   end
 
@@ -767,20 +759,7 @@ defmodule StillWeb.ApplicationLive do
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
 
-  defp rows_from_params(env_params) do
-    env_params
-    |> Enum.sort_by(fn {index, _row} -> String.to_integer(index) end)
-    |> Enum.map(fn {_index, %{"key" => key, "value" => value}} -> %{key: key, value: value} end)
-  end
-
-  defp duplicate_keys?(rows) do
-    keys = rows |> Enum.map(& &1.key) |> Enum.reject(&(&1 == ""))
-    keys != Enum.uniq(keys)
-  end
-
-  defp save_env(socket, rows) do
-    env = rows |> Enum.reject(&(&1.key == "")) |> Map.new(&{&1.key, &1.value})
-
+  defp save_env(socket, env) do
     {:ok, _} =
       Orchestrator.update_application(current_actor(socket), socket.assigns.app, %{
         "env_vars" => env
