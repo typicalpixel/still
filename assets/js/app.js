@@ -47,11 +47,26 @@ const ThemeSwitch = {
   },
 }
 
+// Doppler-style env var name input: force uppercase and fold any character
+// outside [A-Z0-9_] to an underscore, in place, as the user types.
+const EnvKey = {
+  mounted() {
+    this.el.addEventListener("input", () => {
+      const caret = this.el.selectionStart
+      const next = this.el.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_")
+      if (next !== this.el.value) {
+        this.el.value = next
+        this.el.setSelectionRange(caret, caret)
+      }
+    })
+  },
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, ThemeSwitch},
+  hooks: {...colocatedHooks, ThemeSwitch, EnvKey},
 })
 
 // Show progress bar on live navigation and form submits

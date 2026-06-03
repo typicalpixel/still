@@ -366,6 +366,29 @@ defmodule StillWeb.ApplicationLiveTest do
       assert render(lv) =~ "api"
     end
 
+    test "normalizes env var names on save", %{conn: conn} do
+      application_fixture(%{name: "api"})
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/api")
+
+      lv |> element("button[phx-click=open_env]") |> render_click()
+      lv |> element("button", "+ Add variable") |> render_click()
+
+      html =
+        lv
+        |> form("#edit-env-form", %{env: %{"0" => %{key: "database-url", value: "x"}}})
+        |> render_submit()
+
+      assert html =~ "Environment saved"
+
+      assert Still.Applications.get_application_by_name("api").env_vars == %{
+               "DATABASE_URL" => "x"
+             }
+
+      # Flush the LV's pending reload so its async DB read doesn't race teardown.
+      render(lv)
+    end
+
     test "preloads existing environment variables into the editor", %{conn: conn} do
       application_fixture(%{name: "api", env_vars: %{"FOO" => "bar"}})
 

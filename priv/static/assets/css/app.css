@@ -3194,11 +3194,6 @@
       display: block;
     }
   }
-  .md\:flex {
-    @media (width >= 48rem) {
-      display: flex;
-    }
-  }
   .md\:inline {
     @media (width >= 48rem) {
       display: inline;

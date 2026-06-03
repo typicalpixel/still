@@ -164,6 +164,76 @@ defmodule StillWeb.ApplicationsLiveTest do
       assert app.health_check == nil
     end
 
+    test "creates an application with normalized environment variables", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/applications")
+      lv |> element("button", "Add application") |> render_click()
+      lv |> element("#create-app button", "+ Add variable") |> render_click()
+
+      result =
+        lv
+        |> form("#create-app-form", %{
+          app: %{
+            name: "orchard-api",
+            domain: "api.orchard.io",
+            path_prefix: "",
+            exec_command: "bin/orchard start",
+            min_healthy: "1",
+            hc_path: "/health",
+            hc_interval: "5000",
+            hc_deadline: "3000",
+            artifact_type: "unauthenticated_url"
+          },
+          env: %{"0" => %{key: "database-url", value: "ecto://localhost/app"}}
+        })
+        |> render_submit()
+
+      assert {:error, {:live_redirect, %{to: "/applications/orchard-api"}}} = result
+      app = Applications.get_application_by_name("orchard-api")
+      assert app.env_vars == %{"DATABASE_URL" => "ecto://localhost/app"}
+    end
+
+    test "rejects creation when an env value has no key", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/applications")
+      lv |> element("button", "Add application") |> render_click()
+      lv |> element("#create-app button", "+ Add variable") |> render_click()
+
+      html =
+        lv
+        |> form("#create-app-form", %{
+          app: %{
+            name: "orchard-api",
+            domain: "api.orchard.io",
+            path_prefix: "",
+            exec_command: "bin/orchard start",
+            min_healthy: "1",
+            hc_path: "/health",
+            hc_interval: "5000",
+            hc_deadline: "3000",
+            artifact_type: "unauthenticated_url"
+          },
+          env: %{"0" => %{key: "", value: "orphan"}}
+        })
+        |> render_submit()
+
+      assert html =~ "Every value needs a key."
+      assert Applications.get_application_by_name("orchard-api") == nil
+    end
+
+    test "adds, syncs, and removes env rows in the create dialog", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/applications")
+      lv |> element("button", "Add application") |> render_click()
+
+      assert lv |> element("#create-app button", "+ Add variable") |> render_click() =~
+               ~s(name="env[0][key]")
+
+      assert lv
+             |> form("#create-app-form", %{env: %{"0" => %{key: "FOO", value: "bar"}}})
+             |> render_change() =~ ~s(value="FOO")
+
+      assert lv |> element("#create-app button[phx-click=remove_env_row]") |> render_click() =~
+               "No variables."
+    end
+
     test "surfaces validation errors", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/applications")
       lv |> element("button", "Add application") |> render_click()

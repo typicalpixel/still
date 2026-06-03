@@ -12,6 +12,7 @@ defmodule Still.Applications.Application do
   import Ecto.Changeset
 
   alias Still.Applications.ArtifactSource
+  alias Still.Applications.EnvVars
   alias Still.Applications.HealthCheck
   alias Still.Hostname
 
@@ -92,6 +93,7 @@ defmodule Still.Applications.Application do
     |> validate_length(:domain, min: 1, max: 255)
     |> validate_domain_format()
     |> validate_path_prefix()
+    |> normalize_env_vars()
     |> validate_env_vars()
     |> validate_length(:maintenance_message, max: 500)
     |> validate_length(:exec_command, max: 1000)
@@ -115,6 +117,12 @@ defmodule Still.Applications.Application do
         |> validate_format(:path_prefix, ~r{^/}, message: "must start with /")
         |> validate_length(:path_prefix, max: 255)
     end
+  end
+
+  # Names are forced to uppercase-with-underscores (Doppler-style) so every
+  # entry point — UI, API, fixtures — stores keys the same way.
+  defp normalize_env_vars(changeset) do
+    update_change(changeset, :env_vars, &EnvVars.normalize_map/1)
   end
 
   # Env vars become lines in a systemd EnvironmentFile (KEY=value), so a
