@@ -160,6 +160,30 @@ defmodule Still.Caddy.Config do
   def file_server, do: %{"handler" => "file_server"}
 
   @doc """
+  Builds an `encode` handler map enabling response compression. Caddy
+  negotiates the encoding per request from `Accept-Encoding`, preferring
+  zstd then gzip, and skips responses already compressed or below its
+  minimum size.
+  """
+  def encode do
+    %{
+      "handler" => "encode",
+      "encodings" => %{"zstd" => %{}, "gzip" => %{}},
+      "prefer" => ["zstd", "gzip"]
+    }
+  end
+
+  @doc """
+  Builds a `headers` handler map that sets a single response header,
+  overwriting any existing value. Used to stamp `Cache-Control` onto
+  static responses.
+  """
+  def response_header(name, value)
+      when is_binary(name) and name != "" and is_binary(value) and value != "" do
+    %{"handler" => "headers", "response" => %{"set" => %{name => [value]}}}
+  end
+
+  @doc """
   Builds a `static_response` handler map: Caddy answers the request itself
   with a fixed status and body instead of proxying. Used for the root
   catch-all, and the same primitive a future maintenance mode will swap in
@@ -225,22 +249,45 @@ defmodule Still.Caddy.Config do
     %{"handler" => "subroute", "routes" => routes}
   end
 
+  # A content-hashed Vite asset's bytes never change under a given name, so
+  # it can be cached indefinitely. The unhashed app shell must not be.
+  @immutable_cache "public, max-age=31536000, immutable"
+
   @doc """
   Builds the handle list for a static_site application: a single
-  `subroute` that sets the filesystem root, then tries the requested
-  file and falls back to `/index.html` so SPA deep links don't 404,
-  then serves whatever the rewrite produced via `file_server`.
+  `subroute` that
+
+    * sets the filesystem root and enables response compression,
+    * tries the requested file and falls back to `/index.html` so SPA
+      deep links don't 404,
+    * stamps `Cache-Control` — content-hashed `/assets/*` are immutable
+      and cached for a year, everything else (the unhashed app shell,
+      including the `index.html` served for a deep-link fallback) is
+      `no-cache` so a deploy is never masked by a stale shell,
+    * serves the result via `file_server`.
+
+  The cache rules run after the try_files rewrite so they match the
+  final path: a deep link rewritten to `/index.html` gets `no-cache`,
+  not the immutable asset header.
   """
   def static_site_handle(root: root) when is_binary(root) and root != "" do
     [
       subroute(
         routes: [
-          %{"handle" => [vars(root: root)]},
+          %{"handle" => [vars(root: root), encode()]},
           %{
             "match" => [
               %{"file" => %{"try_files" => ["{http.request.uri.path}", "/index.html"]}}
             ],
             "handle" => [rewrite(uri: "{http.matchers.file.relative}")]
+          },
+          %{
+            "match" => [%{"path" => ["/assets/*"]}],
+            "handle" => [response_header("Cache-Control", @immutable_cache)]
+          },
+          %{
+            "match" => [%{"not" => [%{"path" => ["/assets/*"]}]}],
+            "handle" => [response_header("Cache-Control", "no-cache")]
           },
           %{"handle" => [file_server()]}
         ]
