@@ -28,14 +28,14 @@ defmodule Still.Integration.StaticSiteHookTest do
           pre_deploy: %{
             script: """
             set -eu
-            echo "app=$STILL_APPLICATION version=$STILL_VERSION type=$STILL_TYPE slot=$STILL_TARGET_SLOT app_key=$APP_KEY" > #{pre_marker}
+            echo "app=$STILL_APPLICATION version=$STILL_RELEASE_VERSION type=$STILL_TYPE slot=$STILL_TARGET_SLOT app_key=$APP_KEY" > #{pre_marker}
             """,
             timeout_ms: 5_000
           },
           post_deploy: %{
             script: """
             set -eu
-            echo "app=$STILL_APPLICATION version=$STILL_VERSION type=$STILL_TYPE" > #{post_marker}
+            echo "app=$STILL_APPLICATION version=$STILL_RELEASE_VERSION type=$STILL_TYPE" > #{post_marker}
             """,
             timeout_ms: 5_000
           }

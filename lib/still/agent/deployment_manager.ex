@@ -10,6 +10,12 @@ defmodule Still.Agent.DeploymentManager do
   application type — `:static_site` skips start/health-check/stop-old (and
   therefore the release hook) because no process is involved.
 
+  Apps run as a templated systemd unit, one instance per blue/green slot. The
+  unit sources its environment from a per-slot file holding `PORT` and
+  `STILL_RELEASE_VERSION` — both owned by Still — followed by the app's own
+  env_vars. Writing it per slot keeps each slot's port and version intact while
+  both are briefly live during a flip.
+
   This module owns the state machine plumbing and the step body
   implementations. Step bodies shell out to real tools (`curl`, `tar`,
   `systemctl`) and call the Caddy admin API — they are proven end-to-end by
@@ -397,7 +403,7 @@ defmodule Still.Agent.DeploymentManager do
 
     still_env = %{
       "STILL_APPLICATION" => ctx.spec.application,
-      "STILL_VERSION" => ctx.spec.version,
+      "STILL_RELEASE_VERSION" => ctx.spec.version,
       "STILL_TYPE" => Atom.to_string(ctx.spec.type),
       "STILL_APP_DIR" => ctx.app_dir,
       "STILL_RELEASE_DIR" => release_dir,
@@ -671,7 +677,8 @@ defmodule Still.Agent.DeploymentManager do
     dir = Path.join(ctx.app_dir, "slots")
     File.mkdir_p!(dir)
 
-    lines = [{"PORT", ctx.target_port} | Enum.to_list(ctx.spec.env_vars || %{})]
+    system_vars = [{"PORT", ctx.target_port}, {"STILL_RELEASE_VERSION", ctx.spec.version}]
+    lines = system_vars ++ Enum.to_list(ctx.spec.env_vars || %{})
     body = Enum.map_join(lines, "\n", fn {k, v} -> "#{k}=#{v}" end)
 
     case File.write(Path.join(dir, "#{ctx.target_slot}.env"), body <> "\n") do
