@@ -484,6 +484,8 @@ defmodule Still.Orchestrator do
       path_prefix: application.path_prefix,
       env_vars: application.env_vars,
       exec_command: application.exec_command,
+      exec_start_pre: application.exec_start_pre,
+      exec_stop: application.exec_stop,
       health_check: application.health_check,
       hooks: hooks_for(application),
       port_blue: application_server.port_blue,

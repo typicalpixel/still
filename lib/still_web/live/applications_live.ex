@@ -199,6 +199,8 @@ defmodule StillWeb.ApplicationsLive do
         "domain" => "",
         "path_prefix" => "",
         "exec_command" => "",
+        "exec_start_pre" => "",
+        "exec_stop" => "",
         "min_healthy" => "1",
         "hc_path" => "/health",
         "hc_interval" => "5000",
@@ -222,8 +224,12 @@ defmodule StillWeb.ApplicationsLive do
     |> put_health(type, params)
   end
 
-  defp put_exec(attrs, type, params) when type in ["elixir_release", "process"],
-    do: Map.put(attrs, "exec_command", params["exec_command"])
+  defp put_exec(attrs, type, params) when type in ["elixir_release", "process"] do
+    attrs
+    |> Map.put("exec_command", params["exec_command"])
+    |> Map.put("exec_start_pre", blank_to_nil(params["exec_start_pre"]))
+    |> Map.put("exec_stop", blank_to_nil(params["exec_stop"]))
+  end
 
   defp put_exec(attrs, _type, _params), do: attrs
 

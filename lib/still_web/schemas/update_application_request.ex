@@ -12,6 +12,8 @@ defmodule StillWeb.Schemas.UpdateApplicationRequest do
       domain: %OpenApiSpex.Schema{type: :string, minLength: 1, maxLength: 255},
       path_prefix: %OpenApiSpex.Schema{type: :string, maxLength: 255},
       exec_command: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
+      exec_start_pre: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
+      exec_stop: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
       env_vars: %OpenApiSpex.Schema{
         type: :object,
         additionalProperties: %OpenApiSpex.Schema{type: :string}

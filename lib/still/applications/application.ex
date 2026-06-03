@@ -24,6 +24,8 @@ defmodule Still.Applications.Application do
     field :domain, :string
     field :path_prefix, :string
     field :exec_command, :string
+    field :exec_start_pre, :string
+    field :exec_stop, :string
     field :env_vars, :map, default: %{}
     field :min_healthy, :integer, default: 1
     field :maintenance, :boolean, default: false
@@ -52,6 +54,8 @@ defmodule Still.Applications.Application do
       :domain,
       :path_prefix,
       :exec_command,
+      :exec_start_pre,
+      :exec_stop,
       :env_vars,
       :min_healthy
     ])
@@ -72,6 +76,8 @@ defmodule Still.Applications.Application do
       :domain,
       :path_prefix,
       :exec_command,
+      :exec_start_pre,
+      :exec_stop,
       :env_vars,
       :min_healthy,
       :maintenance,
@@ -97,6 +103,8 @@ defmodule Still.Applications.Application do
     |> validate_env_vars()
     |> validate_length(:maintenance_message, max: 500)
     |> validate_length(:exec_command, max: 1000)
+    |> validate_length(:exec_start_pre, max: 1000)
+    |> validate_length(:exec_stop, max: 1000)
     |> validate_number(:min_healthy, greater_than_or_equal_to: 1)
     |> validate_type_specific_fields()
   end
@@ -158,6 +166,8 @@ defmodule Still.Applications.Application do
       :static_site ->
         changeset
         |> require_nil(:exec_command, "must be blank for static_site applications")
+        |> require_nil(:exec_start_pre, "must be blank for static_site applications")
+        |> require_nil(:exec_stop, "must be blank for static_site applications")
         |> require_nil_health_check()
 
       type when type in [:elixir_release, :process] ->

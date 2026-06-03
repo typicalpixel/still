@@ -165,6 +165,14 @@ defmodule StillWeb.ApplicationComponents do
         <dt class="text-paper-500 dark:text-ink-300">Exec</dt>
         <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.exec_command}</dd>
       <% end %>
+      <%= if @app.exec_start_pre do %>
+        <dt class="text-paper-500 dark:text-ink-300">Exec start pre</dt>
+        <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.exec_start_pre}</dd>
+      <% end %>
+      <%= if @app.exec_stop do %>
+        <dt class="text-paper-500 dark:text-ink-300">Exec stop</dt>
+        <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.exec_stop}</dd>
+      <% end %>
       <%= if @app.path_prefix do %>
         <dt class="text-paper-500 dark:text-ink-300">Path prefix</dt>
         <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.path_prefix}</dd>
@@ -448,6 +456,20 @@ defmodule StillWeb.ApplicationComponents do
           placeholder="bin/orchard start"
           class="input w-full font-mono"
         />
+        <.input
+          :if={@type != "static_site"}
+          field={@form[:exec_start_pre]}
+          label="Exec start pre (optional)"
+          placeholder="bin/orchard eval Orchard.Release.migrate"
+          class="input w-full font-mono"
+        />
+        <.input
+          :if={@type != "static_site"}
+          field={@form[:exec_stop]}
+          label="Exec stop (optional)"
+          placeholder="bin/orchard stop"
+          class="input w-full font-mono"
+        />
 
         <div class="grid grid-cols-2 gap-3">
           <.input field={@form[:min_healthy]} type="number" label="Min healthy" min="1" />
@@ -603,6 +625,16 @@ defmodule StillWeb.ApplicationComponents do
         <label :if={@app.type != :static_site} class="block">
           <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Exec command</span>
           <input name="exec_command" value={@app.exec_command} class="input input-bordered w-full" />
+        </label>
+
+        <label :if={@app.type != :static_site} class="block">
+          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Exec start pre (optional)</span>
+          <input name="exec_start_pre" value={@app.exec_start_pre} class="input input-bordered w-full" />
+        </label>
+
+        <label :if={@app.type != :static_site} class="block">
+          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Exec stop (optional)</span>
+          <input name="exec_stop" value={@app.exec_stop} class="input input-bordered w-full" />
         </label>
 
         <div class="grid grid-cols-2 gap-3">
