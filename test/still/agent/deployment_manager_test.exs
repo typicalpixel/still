@@ -210,7 +210,7 @@ defmodule Still.Agent.DeploymentManagerTest do
       # vars sets the filesystem root for the file_server and the file matcher
       assert Enum.any?(routes, fn r ->
                match?(
-                 [%{"handler" => "vars", "root" => "/var/apps/my-api/current_blue"}],
+                 [%{"handler" => "vars", "root" => "/var/apps/my-api/current_blue"} | _],
                  r["handle"]
                )
              end)
@@ -484,7 +484,7 @@ defmodule Still.Agent.DeploymentManagerTest do
       expected_root = Path.join([tmp_dir, "reconcile-static", "current_blue"])
 
       assert Enum.any?(routes, fn r ->
-               match?([%{"handler" => "vars", "root" => ^expected_root}], r["handle"])
+               match?([%{"handler" => "vars", "root" => ^expected_root} | _], r["handle"])
              end)
     end
 

@@ -267,31 +267,87 @@ defmodule Still.Caddy.ConfigTest do
     end
   end
 
+  describe "encode/0" do
+    test "enables zstd and gzip with a preference order" do
+      assert Config.encode() == %{
+               "handler" => "encode",
+               "encodings" => %{"zstd" => %{}, "gzip" => %{}},
+               "prefer" => ["zstd", "gzip"]
+             }
+    end
+  end
+
+  describe "response_header/2" do
+    test "sets a single response header, overwriting existing values" do
+      assert Config.response_header("Cache-Control", "no-cache") == %{
+               "handler" => "headers",
+               "response" => %{"set" => %{"Cache-Control" => ["no-cache"]}}
+             }
+    end
+
+    test "rejects a blank name or value" do
+      assert_raise FunctionClauseError, fn -> Config.response_header("", "no-cache") end
+      assert_raise FunctionClauseError, fn -> Config.response_header("Cache-Control", "") end
+    end
+  end
+
   describe "static_site_handle/1" do
-    test "produces a subroute with vars → try_files rewrite → file_server" do
+    test "produces a subroute: vars+encode → try_files rewrite → cache headers → file_server" do
       [handle] = Config.static_site_handle(root: "/var/apps/site/current_blue")
 
       assert handle["handler"] == "subroute"
       routes = handle["routes"]
-      assert length(routes) == 3
+      assert length(routes) == 5
 
-      # First inner route: vars sets root for the file matcher + file_server
-      [first, second, third] = routes
+      [first, rewrite, assets, shell, last] = routes
 
+      # First inner route: vars sets the root, encode compresses the response
       assert first == %{
-               "handle" => [%{"handler" => "vars", "root" => "/var/apps/site/current_blue"}]
+               "handle" => [
+                 %{"handler" => "vars", "root" => "/var/apps/site/current_blue"},
+                 Config.encode()
+               ]
              }
 
-      # Second inner route: try_files matcher + rewrite
+      # try_files matcher + rewrite to the matched file
       assert [
                %{"file" => %{"try_files" => ["{http.request.uri.path}", "/index.html"]}}
-             ] = second["match"]
+             ] = rewrite["match"]
 
       assert [%{"handler" => "rewrite", "uri" => "{http.matchers.file.relative}"}] =
-               second["handle"]
+               rewrite["handle"]
 
-      # Third inner route: catch-all file_server
-      assert third == %{"handle" => [%{"handler" => "file_server"}]}
+      # Content-hashed assets are cached forever and immutable
+      assert assets == %{
+               "match" => [%{"path" => ["/assets/*"]}],
+               "handle" => [
+                 Config.response_header("Cache-Control", "public, max-age=31536000, immutable")
+               ]
+             }
+
+      # Everything else — the unhashed shell, incl. the deep-link fallback —
+      # is no-cache. The `not` matcher keeps the two rules mutually exclusive.
+      assert shell == %{
+               "match" => [%{"not" => [%{"path" => ["/assets/*"]}]}],
+               "handle" => [Config.response_header("Cache-Control", "no-cache")]
+             }
+
+      # Catch-all file_server serves whatever the rewrite produced
+      assert last == %{"handle" => [%{"handler" => "file_server"}]}
+    end
+
+    test "cache rules run after the try_files rewrite so they match the final path" do
+      [%{"routes" => routes}] = Config.static_site_handle(root: "/var/apps/site/current_blue")
+
+      rewrite_idx =
+        Enum.find_index(routes, &match?(%{"handle" => [%{"handler" => "rewrite"}]}, &1))
+
+      header_idx =
+        Enum.find_index(routes, fn route ->
+          match?([%{"handler" => "headers"}], route["handle"])
+        end)
+
+      assert rewrite_idx < header_idx
     end
 
     test "rejects an empty root" do
