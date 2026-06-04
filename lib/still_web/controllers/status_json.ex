@@ -72,14 +72,14 @@ defmodule StillWeb.StatusJSON do
   def server_application(app) when is_map(app) do
     %{
       application_name: app.application_name,
-      current_version: Map.get(app, :current_version),
-      active_slot: Map.get(app, :active_slot),
-      active_port: Map.get(app, :active_port),
-      health: Map.get(app, :health),
-      last_health_check_at: Map.get(app, :last_health_check_at),
-      pid: Map.get(app, :pid),
-      active_state: Map.get(app, :active_state),
-      active_enter_at: Map.get(app, :active_enter_at)
+      current_version: app.current_version,
+      active_slot: app.active_slot,
+      active_port: app.active_port,
+      health: app.health,
+      last_health_check_at: app.last_health_check_at,
+      pid: app.pid,
+      active_state: app.active_state,
+      active_enter_at: app.active_enter_at
     }
   end
 
@@ -128,8 +128,8 @@ defmodule StillWeb.StatusJSON do
     %{
       server_id: row.server_id,
       desired_version: row.desired_version,
-      current_version: live && Map.get(live, :current_version),
-      health: live && Map.get(live, :health),
+      current_version: live && live.current_version,
+      health: live && live.health,
       connected: true
     }
   end

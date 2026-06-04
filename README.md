@@ -408,6 +408,10 @@ If you run `:integration_root` tests without being root, the affected modules sk
 
 Both `:integration` and `:integration_root` run on standard GitHub-hosted Ubuntu runners. The root suite uses passwordless `sudo` available on those runners. Runners are ephemeral, so the systemd units and `/var/lib/still/applications/` entries written during the test are destroyed with the VM.
 
+## Caddy
+
+Still leans hard on [Caddy](https://caddyserver.com/) for ingress and TLS, and we love it. We're not affiliated with, endorsed by, or sponsored by the Caddy project or [ZeroSSL](https://zerossl.com/) — we're just fans driving its admin API. Caddy is its own project under its own license; go give it a star.
+
 ## License
 
-MIT
+MIT © 2026 [Thomas Athanas](https://github.com/typicalpixel)

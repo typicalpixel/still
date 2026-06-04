@@ -36,12 +36,16 @@ defmodule Still.AgentFixtures do
   def reported_application_fixture(attrs) when is_map(attrs) or is_list(attrs) do
     defaults = %{
       application_name: "app-#{System.unique_integer([:positive])}",
+      type: "elixir_release",
       active_slot: :blue,
       active_port: 20_000,
       current_version: "1.0.0",
       previous_version: nil,
       health: :healthy,
-      last_health_check_at: DateTime.utc_now()
+      last_health_check_at: DateTime.utc_now(),
+      pid: 4321,
+      active_state: "active",
+      active_enter_at: DateTime.utc_now()
     }
 
     Map.merge(defaults, Map.new(attrs))
