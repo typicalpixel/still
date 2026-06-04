@@ -66,6 +66,31 @@ defmodule StillWeb.ApplicationsLiveTest do
       assert html =~ "1 applications · 1 healthy"
     end
 
+    test "renders an app reported active before its first health probe", %{conn: conn} do
+      app = application_fixture(%{name: "api", min_healthy: 1})
+      server = server_fixture(%{name: "s1"})
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server)
+      Applications.set_desired_version_for_all(app, "1.0.0")
+
+      # No :health — exactly what state_to_report/2 sends before HealthMonitor
+      # records a transition. Regression for the KeyError(:health) 500 on /applications.
+      AgentConnectionManager.agent_connected(%{
+        server_id: server.id,
+        node: :a@h,
+        connected_at: DateTime.utc_now(),
+        applications: [
+          %{application_name: "api", current_version: "1.0.0", active_slot: :blue}
+        ]
+      })
+
+      :sys.get_state(AgentConnectionManager)
+
+      {:ok, _lv, html} = live(conn, ~p"/applications")
+
+      assert html =~ "api"
+      assert html =~ "1 applications"
+    end
+
     test "reloads on deploy, server, and fleet events", %{conn: conn} do
       app = application_fixture(%{name: "api"})
       server = server_fixture(%{name: "s1"})
