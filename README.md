@@ -208,6 +208,39 @@ slot path, absolute → verbatim):
   `ExecStartPre`). Typically migrations, e.g. `bin/hello eval Hello.Release.migrate`.
 - `exec_stop` — graceful shutdown command (systemd `ExecStop`), e.g. `bin/hello stop`.
 
+#### Distributed Erlang releases
+
+Each slot's unit gets these variables from Still, alongside your app's own
+`env_vars`:
+
+| Variable | Value |
+| --- | --- |
+| `PORT` | the slot's port (blue and green differ) |
+| `STILL_APPLICATION` | the application name |
+| `STILL_TARGET_SLOT` | `blue` or `green` — which slot this instance is |
+| `STILL_NODE_HOST` | host the node advertises on |
+| `STILL_RELEASE_VERSION` | the version being deployed |
+
+If your release starts distributed Erlang — the `mix release` default, and what
+lets `bin/app eval`/`rpc` run migrations — **both slots run briefly at once
+during a flip**, so they must use different node names. Two BEAMs claiming the
+same name on one host crash-loop the second:
+
+```
+Protocol 'inet_tcp': the name app@host seems to be in use by another Erlang node
+```
+
+Still gives you the slot but doesn't name your node for you. Fold the slot into
+`RELEASE_NODE` in your release's `rel/env.sh.eex`:
+
+```sh
+export RELEASE_DISTRIBUTION=name
+export RELEASE_NODE=${STILL_APPLICATION}-${STILL_TARGET_SLOT}@${STILL_NODE_HOST}
+```
+
+That yields `app-blue@…` and `app-green@…` — distinct, so both coexist during
+the overlap.
+
 ### 3. Assign servers
 
 ```sh
