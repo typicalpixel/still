@@ -235,6 +235,51 @@ defmodule Still.Agent.DeploymentManagerTest do
     end
   end
 
+  describe "slot_env_vars/1" do
+    test "exposes the slot so a release can build a per-slot RELEASE_NODE; blue and green differ" do
+      blue = slot_env_map(%{application: "forge"}, :blue)
+      green = slot_env_map(%{application: "forge"}, :green)
+
+      assert blue["STILL_APPLICATION"] == "forge"
+      assert blue["STILL_TARGET_SLOT"] == "blue"
+      assert green["STILL_TARGET_SLOT"] == "green"
+      assert blue["STILL_TARGET_SLOT"] != green["STILL_TARGET_SLOT"]
+
+      # Still emits the materials; the release owns RELEASE_NODE itself.
+      refute Map.has_key?(blue, "RELEASE_NODE")
+    end
+
+    test "passes through the internal node host, the port, and the version" do
+      env = slot_env_map(%{version: "2.3.4+build"}, :blue, node_host: "10.0.0.7", port: 4_123)
+
+      assert env["STILL_NODE_HOST"] == "10.0.0.7"
+      assert env["PORT"] == 4_123
+      assert env["STILL_RELEASE_VERSION"] == "2.3.4+build"
+    end
+
+    test "lists Still-owned vars first, then the app's own env_vars" do
+      list =
+        DeploymentManager.slot_env_vars(%{
+          spec: valid_spec(%{env_vars: %{"FOO" => "bar"}}),
+          target_slot: :blue,
+          target_port: 4_000,
+          node_host: "127.0.0.1"
+        })
+
+      keys = Enum.map(list, &elem(&1, 0))
+
+      assert Enum.take(keys, 5) == [
+               "PORT",
+               "STILL_APPLICATION",
+               "STILL_TARGET_SLOT",
+               "STILL_NODE_HOST",
+               "STILL_RELEASE_VERSION"
+             ]
+
+      assert List.last(keys) == "FOO"
+    end
+  end
+
   describe "handle_call/3 :deploy" do
     setup :tmp_applications_dir
 
@@ -591,6 +636,17 @@ defmodule Still.Agent.DeploymentManagerTest do
 
       assert {:ok, :noop} = DeploymentManager.reconcile_route(spec)
     end
+  end
+
+  defp slot_env_map(spec_overrides, slot, opts \\ []) do
+    %{
+      spec: valid_spec(spec_overrides),
+      target_slot: slot,
+      target_port: Keyword.get(opts, :port, 4_000),
+      node_host: Keyword.get(opts, :node_host, "127.0.0.1")
+    }
+    |> DeploymentManager.slot_env_vars()
+    |> Map.new()
   end
 
   defp stub_caddy(current) do

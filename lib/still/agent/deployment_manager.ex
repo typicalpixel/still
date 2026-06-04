@@ -11,10 +11,13 @@ defmodule Still.Agent.DeploymentManager do
   therefore the release hook) because no process is involved.
 
   Apps run as a templated systemd unit, one instance per blue/green slot. The
-  unit sources its environment from a per-slot file holding `PORT` and
-  `STILL_RELEASE_VERSION` — both owned by Still — followed by the app's own
-  env_vars. Writing it per slot keeps each slot's port and version intact while
-  both are briefly live during a flip.
+  unit sources its environment from a per-slot file holding `PORT`,
+  `STILL_APPLICATION`, `STILL_TARGET_SLOT`, `STILL_NODE_HOST`, and
+  `STILL_RELEASE_VERSION` (all owned by Still), followed by the app's own
+  env_vars. Still does not set `RELEASE_NODE`; it emits the slot so a
+  distributed release can build a per-slot node name in its own `env.sh` and
+  keep blue and green off the same Erlang node name while both are briefly
+  live during a flip.
 
   This module owns the state machine plumbing and the step body
   implementations. Step bodies shell out to real tools (`curl`, `tar`,
@@ -260,10 +263,17 @@ defmodule Still.Agent.DeploymentManager do
          app_dir: app_dir,
          release_dir: Path.join([app_dir, "releases", spec.version]),
          tarball_path: Path.join(app_dir, "#{spec.version}.tar.gz"),
-         target_symlink: Path.join(app_dir, "current_#{target_slot}")
+         target_symlink: Path.join(app_dir, "current_#{target_slot}"),
+         node_host: node_host()
        }}
     end
   end
+
+  # Host the app advertises its Erlang node on — the STILL_NODE_HOST the agent
+  # already runs with. The installer always writes it to /etc/still/still.env
+  # in every mode (routable IP with remote agents, 127.0.0.1 standalone), so
+  # the fallback only applies when the agent runs outside an install (dev/test).
+  defp node_host, do: System.get_env("STILL_NODE_HOST", "127.0.0.1")
 
   # Distinguish a genuinely-absent state file (first deploy → nil) from a
   # corrupt one. Collapsing both to nil would make a garbled state.json look
@@ -673,13 +683,39 @@ defmodule Still.Agent.DeploymentManager do
 
   # --- systemd helpers ---
 
+  # six:ignore:stop
+
+  @doc """
+  Ordered `{key, value}` env for a slot's systemd EnvironmentFile:
+  Still-owned context first, then the app's `env_vars`.
+
+  Still emits `STILL_APPLICATION`, `STILL_TARGET_SLOT`, `STILL_NODE_HOST`, and
+  `STILL_RELEASE_VERSION` (plus `PORT`) but does not set `RELEASE_NODE` — a
+  release owns its own node name. `STILL_TARGET_SLOT` is the one thing the
+  release can't derive itself; a distributed release composes a per-slot
+  `RELEASE_NODE` from it (and `STILL_NODE_HOST`) in `rel/env.sh.eex` so blue
+  and green don't share an Erlang node name while both are briefly live during
+  a flip.
+  """
+  def slot_env_vars(ctx) when is_map(ctx) do
+    still_vars = [
+      {"PORT", ctx.target_port},
+      {"STILL_APPLICATION", ctx.spec.application},
+      {"STILL_TARGET_SLOT", Atom.to_string(ctx.target_slot)},
+      {"STILL_NODE_HOST", ctx.node_host},
+      {"STILL_RELEASE_VERSION", ctx.spec.version}
+    ]
+
+    still_vars ++ Enum.to_list(ctx.spec.env_vars || %{})
+  end
+
+  # six:ignore:start
+
   defp write_slot_env_file(ctx) do
     dir = Path.join(ctx.app_dir, "slots")
     File.mkdir_p!(dir)
 
-    system_vars = [{"PORT", ctx.target_port}, {"STILL_RELEASE_VERSION", ctx.spec.version}]
-    lines = system_vars ++ Enum.to_list(ctx.spec.env_vars || %{})
-    body = Enum.map_join(lines, "\n", fn {k, v} -> "#{k}=#{v}" end)
+    body = Enum.map_join(slot_env_vars(ctx), "\n", fn {k, v} -> "#{k}=#{v}" end)
 
     case File.write(Path.join(dir, "#{ctx.target_slot}.env"), body <> "\n") do
       :ok -> :ok

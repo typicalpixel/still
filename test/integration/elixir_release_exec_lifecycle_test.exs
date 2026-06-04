@@ -71,6 +71,7 @@ defmodule Still.Integration.ElixirReleaseExecLifecycleTest do
     assert fetch_body(caddy.http_port, "/") =~ "vA"
     assert File.read_link!(Path.join(app_dir, "current_blue")) =~ "releases/0.0.1-a"
     assert slot_env(app_dir, "blue") =~ "STILL_RELEASE_VERSION=0.0.1-a"
+    assert slot_env(app_dir, "blue") =~ "STILL_TARGET_SLOT=blue"
 
     # Second deploy flips to green with the *same* templated unit: `%i`→`green`,
     # `current_green` → releases/0.0.1-b. Confirms `current_%i` tracks the slot.
@@ -78,6 +79,7 @@ defmodule Still.Integration.ElixirReleaseExecLifecycleTest do
     assert fetch_body(caddy.http_port, "/") =~ "vB"
     assert File.read_link!(Path.join(app_dir, "current_green")) =~ "releases/0.0.1-b"
     assert slot_env(app_dir, "green") =~ "STILL_RELEASE_VERSION=0.0.1-b"
+    assert slot_env(app_dir, "green") =~ "STILL_TARGET_SLOT=green"
     # The previous slot's env file is untouched, so blue still reports its own
     # release — each slot's version stays consistent with the release on disk.
     assert slot_env(app_dir, "blue") =~ "STILL_RELEASE_VERSION=0.0.1-a"
