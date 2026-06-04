@@ -92,6 +92,24 @@ defmodule StillWeb.DashboardLiveTest do
       assert html =~ "1 applications on 1 hosts"
     end
 
+    test "renders an app reported active before its first health probe", %{conn: conn} do
+      app = application_fixture(%{name: "api", min_healthy: 1})
+      server = server_fixture(%{name: "s1"})
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server)
+      Applications.set_desired_version_for_all(app, "1.0.0")
+
+      # No :health — exactly what state_to_report/2 sends before HealthMonitor
+      # records a transition. Regression for the KeyError(:health) 500 on /.
+      connect_agent(server.id, [
+        %{application_name: "api", current_version: "1.0.0", active_slot: :blue}
+      ])
+
+      {:ok, _lv, html} = live(conn, ~p"/")
+
+      assert html =~ "api"
+      assert html =~ "1 applications on 1 hosts"
+    end
+
     test "prepends activity and reloads apps on deploy events", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/")
 
