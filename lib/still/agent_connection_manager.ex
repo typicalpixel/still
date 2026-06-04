@@ -16,6 +16,7 @@ defmodule Still.AgentConnectionManager do
 
   require Logger
 
+  alias Still.AgentConnectionManager.App
   alias Still.Audit
   alias Still.Audit.Actor
   alias Still.Fleet
@@ -96,6 +97,7 @@ defmodule Still.AgentConnectionManager do
   @impl true
   def handle_cast({:agent_connected, report}, state) when is_map(state) do
     server_id = report.server_id
+    report = %{report | applications: Enum.map(report.applications, &App.new/1)}
 
     Logger.info("agent connected: #{server_id}")
     :ets.insert(@table, {server_id, report})
@@ -119,7 +121,7 @@ defmodule Still.AgentConnectionManager do
       when is_map(state) do
     case :ets.lookup(@table, server_id) do
       [{^server_id, report}] ->
-        updated = merge_application_state(report, app_name, app_state)
+        updated = put_application_state(report, app_name, app_state)
         :ets.insert(@table, {server_id, updated})
 
       [] ->
@@ -132,7 +134,7 @@ defmodule Still.AgentConnectionManager do
   def handle_cast({:health_transition, server_id, transition}, state) when is_map(state) do
     case :ets.lookup(@table, server_id) do
       [{^server_id, report}] ->
-        updated = merge_health_transition(report, transition)
+        updated = put_health_transition(report, transition)
         :ets.insert(@table, {server_id, updated})
         Still.Events.health_transition(transition.application, transition)
 
@@ -208,23 +210,28 @@ defmodule Still.AgentConnectionManager do
     )
   end
 
-  defp merge_application_state(report, app_name, app_state) do
+  # The agent reports a full snapshot every time (see
+  # `Still.Agent.NodeConnector.state_to_report/2`), so we rebuild the entry
+  # from scratch rather than merging. `health` is controller-owned (set by
+  # health transitions), so carry it across an agent state update.
+  defp put_application_state(report, app_name, payload) do
+    entry = App.new(Map.put(payload, :application_name, app_name))
+
     case Enum.find_index(report.applications, &(&1.application_name == app_name)) do
       nil ->
-        new_entry = Map.merge(%{application_name: app_name}, app_state)
-        %{report | applications: report.applications ++ [new_entry]}
+        %{report | applications: report.applications ++ [entry]}
 
       index ->
         updated =
           List.update_at(report.applications, index, fn app ->
-            Map.merge(app, app_state)
+            %{entry | health: app.health}
           end)
 
         %{report | applications: updated}
     end
   end
 
-  defp merge_health_transition(report, transition) do
+  defp put_health_transition(report, transition) do
     case Enum.find_index(report.applications, &(&1.application_name == transition.application)) do
       nil ->
         report
@@ -232,7 +239,7 @@ defmodule Still.AgentConnectionManager do
       index ->
         updated =
           List.update_at(report.applications, index, fn app ->
-            Map.put(app, :health, transition.to)
+            %{app | health: transition.to}
           end)
 
         %{report | applications: updated}

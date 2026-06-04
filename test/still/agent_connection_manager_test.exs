@@ -2,6 +2,7 @@ defmodule Still.AgentConnectionManagerTest do
   use Still.DataCase, async: false
 
   alias Still.AgentConnectionManager
+  alias Still.AgentConnectionManager.App
   alias Still.Fleet
 
   import Still.FleetFixtures
@@ -84,6 +85,40 @@ defmodule Still.AgentConnectionManagerTest do
       assert length(result.applications) == 1
     end
 
+    test "normalizes agent-reported apps into App structs even without health" do
+      # Real agent snapshots (state_to_report/2) omit :health — it's layered on
+      # later by health transitions. The stored entry must still be a fully
+      # shaped struct so consumers read .health directly instead of crashing on
+      # a missing key. Regression for the KeyError(:health) on / and /applications.
+      report = %{
+        server_id: "srv-1",
+        node: :"still_agent@10.0.0.3",
+        connected_at: DateTime.utc_now(),
+        applications: [
+          %{
+            application_name: "my-api",
+            type: "elixir_release",
+            active_slot: "blue",
+            active_port: 20_002,
+            current_version: "0.0.1+abc",
+            previous_version: nil,
+            last_health_check_at: nil,
+            pid: 1234,
+            active_state: "active",
+            active_enter_at: DateTime.utc_now()
+          }
+        ]
+      }
+
+      AgentConnectionManager.agent_connected(report)
+      :sys.get_state(AgentConnectionManager)
+
+      [app] = AgentConnectionManager.get_agent_state("srv-1").applications
+      assert %App{} = app
+      assert app.health == nil
+      assert app.current_version == "0.0.1+abc"
+    end
+
     test "overwrites the previous report on reconnect" do
       AgentConnectionManager.agent_connected(sample_report("srv-1"))
       :sys.get_state(AgentConnectionManager)
@@ -113,23 +148,28 @@ defmodule Still.AgentConnectionManagerTest do
 
   describe "update_application_state/3" do
     @tag :capture_log
-    test "merges the new app state into the existing report" do
+    test "replaces agent-reported fields and carries controller-owned health forward" do
       AgentConnectionManager.agent_connected(sample_report("srv-1"))
       :sys.get_state(AgentConnectionManager)
 
+      # The agent re-reports a full snapshot; state_to_report never includes
+      # health (that's controller-owned), so agent fields are replaced while
+      # the health a prior transition set is carried across.
       AgentConnectionManager.update_application_state("srv-1", "my-api", %{
-        health: :unhealthy,
-        current_version: "0.0.2+def"
+        active_slot: :green,
+        active_port: 20_001,
+        current_version: "0.0.2+def",
+        previous_version: "0.0.1+abc"
       })
 
       :sys.get_state(AgentConnectionManager)
 
       report = AgentConnectionManager.get_agent_state("srv-1")
       [app] = report.applications
-      assert app.health == :unhealthy
       assert app.current_version == "0.0.2+def"
-      # Unchanged fields are preserved
-      assert app.active_slot == :blue
+      assert app.active_slot == :green
+      assert app.previous_version == "0.0.1+abc"
+      assert app.health == :healthy
     end
 
     @tag :capture_log
