@@ -79,5 +79,13 @@ defmodule StillWeb.ApiSpecTest do
       assert body["info"]["title"] == "Still API"
       assert is_map(body["paths"]["/api/auth/login"])
     end
+
+    test "exposes the app version as the x-still-version vendor extension", %{conn: conn} do
+      body = conn |> get("/api/openapi") |> json_response(200)
+
+      assert body["info"]["x-still-version"] == to_string(Application.spec(:still, :vsn))
+      assert body["info"]["x-still-version"] =~ ~r/^\d+\.\d+\.\d+/
+      assert body["info"]["version"] == "2026-04-09"
+    end
   end
 end
