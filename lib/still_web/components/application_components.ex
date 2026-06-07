@@ -22,6 +22,7 @@ defmodule StillWeb.ApplicationComponents do
       rows={@apps}
       row_id={fn entry -> "app-#{entry.application.name}" end}
       row_item={&app_row/1}
+      row_click={fn entry -> JS.navigate(~p"/applications/#{entry.application.name}") end}
     >
       <:col :let={r} label="Application">
         <.link navigate={~p"/applications/#{r.name}"} class="font-medium hover:underline">
@@ -63,6 +64,7 @@ defmodule StillWeb.ApplicationComponents do
       rows={@apps}
       row_id={fn entry -> "app-#{entry.application.name}" end}
       row_item={fn entry -> index_row(entry, @last_deploys) end}
+      row_click={fn entry -> JS.navigate(~p"/applications/#{entry.application.name}") end}
     >
       <:col :let={r} label="Application">
         <span class="inline-flex items-center gap-2">
@@ -131,67 +133,80 @@ defmodule StillWeb.ApplicationComponents do
   # an error), neutral for process until it earns a signature of its own.
   defp type_variant(:elixir_release),
     do: %{
-      label: "elixir",
+      label: "Elixir",
       title: "Elixir release · managed via mix release",
       icon: "hero-cpu-chip",
-      tone: "bg-plum-50 text-plum-700 dark:bg-plum-700/30 dark:text-plum-100"
+      tone: "bg-plum-50 text-plum-700 dark:bg-plum-500/25 dark:text-plum-100"
     }
 
   defp type_variant(:static_site),
     do: %{
-      label: "static",
+      label: "Static",
       title: "Static site · served by Caddy",
       icon: "hero-globe-alt",
-      tone: "bg-pink-50 text-pink-700 dark:bg-pink-700/30 dark:text-pink-100"
+      tone: "bg-pink-100 text-pink-700 dark:bg-pink-500/25 dark:text-pink-200"
     }
 
   defp type_variant(:process),
     do: %{
-      label: "process",
+      label: "Process",
       title: "Long-running process · run as a systemd unit",
       icon: "hero-command-line",
       tone: "bg-paper-200 text-paper-700 dark:bg-ink-600 dark:text-ink-100"
     }
+
+  @doc "Humanizes a hook event atom/string — `pre_deploy` becomes `Pre-deploy`."
+  def humanize_event(event) when is_atom(event) or is_binary(event),
+    do: event |> to_string() |> String.replace("_", "-") |> String.capitalize()
 
   @doc "The configuration card for an application detail page."
   attr :app, :map, required: true
 
   def app_config(assigns) do
     ~H"""
-    <dl class="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-[13px]">
-      <dt class="text-paper-500 dark:text-ink-300">Type</dt>
-      <dd class="text-paper-800 dark:text-ink-50">{@app.type}</dd>
-      <%= if @app.exec_command do %>
-        <dt class="text-paper-500 dark:text-ink-300">Exec</dt>
-        <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.exec_command}</dd>
-      <% end %>
-      <%= if @app.exec_start_pre do %>
-        <dt class="text-paper-500 dark:text-ink-300">Exec start pre</dt>
-        <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.exec_start_pre}</dd>
-      <% end %>
-      <%= if @app.exec_stop do %>
-        <dt class="text-paper-500 dark:text-ink-300">Exec stop</dt>
-        <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.exec_stop}</dd>
-      <% end %>
-      <%= if @app.path_prefix do %>
-        <dt class="text-paper-500 dark:text-ink-300">Path prefix</dt>
-        <dd class="font-mono text-paper-800 dark:text-ink-50">{@app.path_prefix}</dd>
-      <% end %>
-      <%= if @app.health_check do %>
-        <dt class="text-paper-500 dark:text-ink-300">Health check</dt>
-        <dd class="font-mono text-paper-800 dark:text-ink-50">
-          GET {@app.health_check.path} · {@app.health_check.interval_ms}ms interval · {@app.health_check.deadline_ms}ms deadline
-        </dd>
-      <% end %>
-      <dt class="text-paper-500 dark:text-ink-300">Min healthy</dt>
-      <dd class="text-paper-800 dark:text-ink-50">{@app.min_healthy}</dd>
-      <dt class="text-paper-500 dark:text-ink-300">Artifact source</dt>
-      <dd class="text-paper-800 dark:text-ink-50">{@app.artifact_source.type}</dd>
-      <dt class="text-paper-500 dark:text-ink-300">Created</dt>
-      <dd class="text-paper-800 dark:text-ink-50">{relative_time(@app.inserted_at)}</dd>
-      <dt class="text-paper-500 dark:text-ink-300">Updated</dt>
-      <dd class="text-paper-800 dark:text-ink-50">{relative_time(@app.updated_at)}</dd>
+    <.detail_list>
+      <.detail_row label="Type">{@app.type}</.detail_row>
+      <.detail_row :if={@app.exec_command} label="Exec" mono>{@app.exec_command}</.detail_row>
+      <.detail_row :if={@app.exec_start_pre} label="Exec start pre" mono>
+        {@app.exec_start_pre}
+      </.detail_row>
+      <.detail_row :if={@app.exec_stop} label="Exec stop" mono>{@app.exec_stop}</.detail_row>
+      <.detail_row :if={@app.path_prefix} label="Path prefix" mono>{@app.path_prefix}</.detail_row>
+      <.detail_row :if={@app.health_check} label="Health check" mono>
+        GET {@app.health_check.path} · {@app.health_check.interval_ms}ms interval · {@app.health_check.deadline_ms}ms deadline
+      </.detail_row>
+      <.detail_row label="Min healthy">{@app.min_healthy}</.detail_row>
+      <.detail_row label="Artifact source">{@app.artifact_source.type}</.detail_row>
+      <.detail_row label="Created">{relative_time(@app.inserted_at)}</.detail_row>
+      <.detail_row label="Updated">{relative_time(@app.updated_at)}</.detail_row>
+    </.detail_list>
+    """
+  end
+
+  @doc "A card wrapper of aligned label/value rows — shared by the app-detail sections."
+  slot :inner_block, required: true
+
+  def detail_list(assigns) do
+    ~H"""
+    <dl class="card-surface grid grid-cols-[max-content_1fr] gap-x-6 divide-y divide-paper-200 overflow-hidden rounded-2xl text-[13px] dark:divide-ink-700">
+      {render_slot(@inner_block)}
     </dl>
+    """
+  end
+
+  @doc "One aligned label/value row inside a `detail_list`. `mono` renders the value monospaced."
+  attr :label, :string, required: true
+  attr :mono, :boolean, default: false
+  slot :inner_block, required: true
+
+  def detail_row(assigns) do
+    ~H"""
+    <div class="col-span-2 grid grid-cols-subgrid items-baseline px-4 py-2.5">
+      <dt class="font-medium text-paper-700 dark:text-ink-100">{@label}</dt>
+      <dd class={["min-w-0 text-paper-600 dark:text-ink-300", @mono && "font-mono"]}>
+        {render_slot(@inner_block)}
+      </dd>
+    </div>
     """
   end
 
@@ -202,18 +217,20 @@ defmodule StillWeb.ApplicationComponents do
     assigns = assign(assigns, :entries, env_entries(assigns.app))
 
     ~H"""
-    <div
+    <dl
       :if={@entries != []}
-      class="hairline grid grid-cols-[max-content_1fr] gap-x-4 divide-y divide-paper-200 rounded-lg border dark:divide-ink-700"
+      class="card-surface grid grid-cols-[max-content_1fr] gap-x-6 divide-y divide-paper-200 overflow-hidden rounded-2xl text-[13px] dark:divide-ink-700"
     >
       <div
         :for={{key, value} <- @entries}
-        class="col-span-2 grid grid-cols-subgrid items-baseline px-4 py-2 text-[13px]"
+        class="col-span-2 grid grid-cols-subgrid items-baseline px-4 py-2.5"
       >
-        <span class="font-mono text-paper-800 dark:text-ink-50">{key}</span>
-        <span class="min-w-0 truncate font-mono text-paper-500 dark:text-ink-300" title={value}>{value}</span>
+        <dt class="font-mono font-medium text-paper-800 dark:text-ink-50">{key}</dt>
+        <dd class="min-w-0 truncate font-mono text-paper-500 dark:text-ink-300" title={value}>
+          {value}
+        </dd>
       </div>
-    </div>
+    </dl>
     <p :if={@entries == []} class="text-[13px] text-paper-500 italic dark:text-ink-300">
       No environment variables set.
     </p>
@@ -226,12 +243,15 @@ defmodule StillWeb.ApplicationComponents do
 
   def app_hooks(assigns) do
     ~H"""
-    <div :if={@hooks != []} class="space-y-3">
-      <div :for={hook <- @hooks} id={"hook-#{hook.id}"} class="hairline rounded-lg border p-4">
-        <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-[13px]">
-          <div class="flex flex-wrap items-center gap-2">
-            <.chip>{hook.event}</.chip>
-            <span class="text-paper-500 dark:text-ink-300">
+    <div
+      :if={@hooks != []}
+      class="card-surface divide-y divide-paper-200 overflow-hidden rounded-2xl dark:divide-ink-700"
+    >
+      <div :for={hook <- @hooks} id={"hook-#{hook.id}"} class="space-y-2 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[13px]">
+          <div class="flex flex-wrap items-baseline gap-2">
+            <span class="font-medium text-paper-800 dark:text-ink-50">{humanize_event(hook.event)}</span>
+            <span class="text-[12px] text-paper-500 dark:text-ink-300">
               timeout {hook.timeout_ms}ms · updated {relative_time(hook.updated_at)}
             </span>
           </div>
@@ -254,7 +274,7 @@ defmodule StillWeb.ApplicationComponents do
             </button>
           </div>
         </div>
-        <pre class="max-h-40 overflow-auto rounded-md bg-paper-100 px-3 py-2 font-mono text-[12px] text-paper-700 dark:bg-ink-900 dark:text-ink-100">{hook.script}</pre>
+        <pre class="code-surface max-h-40 overflow-auto rounded-lg px-3 py-2 font-mono text-[12px] ring-1 ring-white/[0.06]">{hook.script}</pre>
       </div>
     </div>
     <p :if={@hooks == []} class="text-[13px] text-paper-500 italic dark:text-ink-300">
@@ -401,7 +421,7 @@ defmodule StillWeb.ApplicationComponents do
 
   def application_create_dialog(assigns) do
     ~H"""
-    <.modal id="create-app" show={@show} on_cancel="close_create">
+    <.modal id="create-app" show={@show} on_cancel="close_create" class="max-w-2xl">
       <:title>Create an application</:title>
 
       <.form
@@ -411,47 +431,47 @@ defmodule StillWeb.ApplicationComponents do
         phx-submit="create_app"
         class="space-y-3"
       >
-        <p class="text-[12.5px] text-paper-500 dark:text-ink-300">
-          Name and type are immutable after creation.
-        </p>
-
-        <.input field={@form[:name]} label="Name" placeholder="orchard-api" class="input w-full font-mono" />
-
-        <div>
-          <span class="mb-1 block text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300">
-            Type
-          </span>
-          <div class="flex flex-wrap gap-1">
-            <button
-              :for={
-                {value, label} <- [
-                  {"elixir_release", "Elixir release"},
-                  {"static_site", "Static site"},
-                  {"process", "Process"}
-                ]
-              }
-              type="button"
-              phx-click="select_create_type"
-              phx-value-type={value}
-              class={["btn btn-xs", if(value == @type, do: "btn-neutral", else: "btn-ghost")]}
-            >
-              {label}
-            </button>
+        <div class="grid grid-cols-1 items-start gap-x-4 sm:grid-cols-2">
+          <.input field={@form[:name]} label="Name" placeholder="orchard-api" class="input w-full font-mono" />
+          <div class="fieldset mb-2">
+            <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">
+              Type
+            </span>
+            <div class="flex flex-wrap gap-1">
+              <button
+                :for={
+                  {value, label} <- [
+                    {"elixir_release", "Elixir release"},
+                    {"static_site", "Static site"},
+                    {"process", "Process"}
+                  ]
+                }
+                type="button"
+                phx-click="select_create_type"
+                phx-value-type={value}
+                class={["btn btn-sm", if(value == @type, do: "btn-neutral", else: "btn-ghost")]}
+              >
+                {label}
+              </button>
+            </div>
           </div>
         </div>
 
-        <.input
-          field={@form[:domain]}
-          label="Domain"
-          placeholder="api.orchard.io"
-          class="input w-full font-mono"
-        />
-        <.input
-          field={@form[:path_prefix]}
-          label="Path prefix (optional)"
-          placeholder="/api"
-          class="input w-full font-mono"
-        />
+        <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+          <.input
+            field={@form[:domain]}
+            label="Domain"
+            placeholder="api.orchard.io"
+            class="input w-full font-mono"
+          />
+          <.input
+            field={@form[:path_prefix]}
+            label="Path prefix (optional)"
+            placeholder="/api"
+            class="input w-full font-mono"
+          />
+        </div>
+
         <.input
           :if={@type != "static_site"}
           field={@form[:exec_command]}
@@ -459,22 +479,22 @@ defmodule StillWeb.ApplicationComponents do
           placeholder="bin/orchard start"
           class="input w-full font-mono"
         />
-        <.input
-          :if={@type != "static_site"}
-          field={@form[:exec_start_pre]}
-          label="Exec start pre (optional)"
-          placeholder="bin/orchard eval Orchard.Release.migrate"
-          class="input w-full font-mono"
-        />
-        <.input
-          :if={@type != "static_site"}
-          field={@form[:exec_stop]}
-          label="Exec stop (optional)"
-          placeholder="bin/orchard stop"
-          class="input w-full font-mono"
-        />
+        <div :if={@type != "static_site"} class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+          <.input
+            field={@form[:exec_start_pre]}
+            label="Exec start pre (optional)"
+            placeholder="bin/orchard eval Orchard.Release.migrate"
+            class="input w-full font-mono"
+          />
+          <.input
+            field={@form[:exec_stop]}
+            label="Exec stop (optional)"
+            placeholder="bin/orchard stop"
+            class="input w-full font-mono"
+          />
+        </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
           <.input field={@form[:min_healthy]} type="number" label="Min healthy" min="1" />
           <.input
             field={@form[:artifact_type]}
@@ -484,23 +504,17 @@ defmodule StillWeb.ApplicationComponents do
           />
         </div>
 
-        <fieldset :if={@type != "static_site"} class="hairline rounded-md border p-3">
-          <legend class="px-1 text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300">
-            Health check
-          </legend>
-          <div class="space-y-2">
-            <.input field={@form[:hc_path]} placeholder="/health" class="input w-full font-mono" />
-            <div class="grid grid-cols-2 gap-3">
-              <.input field={@form[:hc_interval]} type="number" min="1" label="Interval (ms)" />
-              <.input field={@form[:hc_deadline]} type="number" min="1" label="Deadline (ms)" />
-            </div>
+        <fieldset :if={@type != "static_site"} class="well-surface rounded-lg p-3">
+          <p class="mb-2 text-[13px] font-semibold text-paper-800 dark:text-ink-50">Health check</p>
+          <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-[2fr_1fr_1fr]">
+            <.input field={@form[:hc_path]} label="Path" placeholder="/health" class="input w-full font-mono" />
+            <.input field={@form[:hc_interval]} type="number" min="1" label="Interval (ms)" />
+            <.input field={@form[:hc_deadline]} type="number" min="1" label="Deadline (ms)" />
           </div>
         </fieldset>
 
-        <fieldset class="hairline rounded-md border p-3">
-          <legend class="px-1 text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300">
-            Environment
-          </legend>
+        <fieldset class="well-surface rounded-lg p-3">
+          <p class="mb-1 text-[13px] font-semibold text-paper-800 dark:text-ink-50">Environment</p>
           <p class="mb-2 text-[12px] text-paper-500 dark:text-ink-300">
             Variables the app needs at first boot — a database URL, secret key base, and so on.
           </p>
@@ -555,7 +569,7 @@ defmodule StillWeb.ApplicationComponents do
 
       <form id="assign-server-form" phx-submit="assign_server" class="space-y-3">
         <div :if={@servers != []}>
-          <label class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Server</label>
+          <label class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Server</label>
           <select name="server_id" class="select select-bordered w-full">
             <option value="">Choose a server…</option>
             <option :for={server <- @servers} value={server.id}>{server.name} · {server.host}</option>
@@ -614,35 +628,35 @@ defmodule StillWeb.ApplicationComponents do
         </p>
 
         <label class="block">
-          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Domain</span>
+          <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Domain</span>
           <input name="domain" value={@app.domain} class="input input-bordered w-full" />
         </label>
 
         <label class="block">
-          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">
+          <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">
             Path prefix (optional)
           </span>
           <input name="path_prefix" value={@app.path_prefix} class="input input-bordered w-full" />
         </label>
 
         <label :if={@app.type != :static_site} class="block">
-          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Exec command</span>
+          <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Exec command</span>
           <input name="exec_command" value={@app.exec_command} class="input input-bordered w-full" />
         </label>
 
         <label :if={@app.type != :static_site} class="block">
-          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Exec start pre (optional)</span>
+          <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Exec start pre (optional)</span>
           <input name="exec_start_pre" value={@app.exec_start_pre} class="input input-bordered w-full" />
         </label>
 
         <label :if={@app.type != :static_site} class="block">
-          <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Exec stop (optional)</span>
+          <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Exec stop (optional)</span>
           <input name="exec_stop" value={@app.exec_stop} class="input input-bordered w-full" />
         </label>
 
         <div class="grid grid-cols-2 gap-3">
           <label class="block">
-            <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Min healthy</span>
+            <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Min healthy</span>
             <input
               name="min_healthy"
               type="number"
@@ -652,7 +666,7 @@ defmodule StillWeb.ApplicationComponents do
             />
           </label>
           <label class="block">
-            <span class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Artifact source</span>
+            <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Artifact source</span>
             <select name="artifact_type" class="select select-bordered w-full">
               <option value="unauthenticated_url" selected={@app.artifact_source.type == :unauthenticated_url}>
                 Public URL
@@ -664,8 +678,8 @@ defmodule StillWeb.ApplicationComponents do
           </label>
         </div>
 
-        <fieldset :if={@app.type != :static_site} class="hairline rounded-md border p-3">
-          <legend class="px-1 text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Health check</legend>
+        <fieldset :if={@app.type != :static_site} class="well-surface rounded-lg p-3">
+          <p class="mb-2 text-[13px] font-semibold text-paper-800 dark:text-ink-50">Health check</p>
           <div class="space-y-2">
             <input
               name="hc_path"
@@ -792,7 +806,7 @@ defmodule StillWeb.ApplicationComponents do
   def hook_dialog(assigns) do
     ~H"""
     <.modal id="hook-form" show={@show} on_cancel="close_hook">
-      <:title>{if @editing, do: "Edit #{@editing.event} hook", else: "Add a lifecycle hook"}</:title>
+      <:title>{if @editing, do: "Edit #{humanize_event(@editing.event)} hook", else: "Add a lifecycle hook"}</:title>
 
       <.form for={@form} id="hook-form-form" phx-submit="save_hook" class="space-y-3">
         <p class="text-[12.5px] text-paper-500 dark:text-ink-300">
@@ -800,9 +814,10 @@ defmodule StillWeb.ApplicationComponents do
         </p>
 
         <div>
-          <label class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Event</label>
-          <div :if={@editing} class="font-mono text-sm">
-            {@editing.event} <span class="text-paper-400 italic dark:text-ink-500">(immutable after create)</span>
+          <label class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Event</label>
+          <div :if={@editing} class="text-sm">
+            <span class="font-medium">{humanize_event(@editing.event)}</span>
+            <span class="text-paper-400 italic dark:text-ink-500">(immutable after create)</span>
           </div>
           <div :if={!@editing} class="flex flex-wrap gap-1">
             <button
@@ -812,7 +827,7 @@ defmodule StillWeb.ApplicationComponents do
               phx-value-event={event}
               class={["btn btn-xs", if(event == @event, do: "btn-neutral", else: "btn-ghost")]}
             >
-              {event}
+              {humanize_event(event)}
             </button>
           </div>
           <p :if={!@editing and @available_events == []} class="text-[12px] text-paper-400 italic dark:text-ink-500">
@@ -847,7 +862,7 @@ defmodule StillWeb.ApplicationComponents do
   def hook_delete_dialog(assigns) do
     ~H"""
     <.modal id="delete-hook" show={@target != nil} on_cancel="close_hook_delete">
-      <:title>Delete {@target && @target.event} hook?</:title>
+      <:title>Delete {@target && humanize_event(@target.event)} hook?</:title>
 
       <p class="text-sm">
         The hook script is removed from this application. Future deploys and rollbacks won't run it.

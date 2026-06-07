@@ -14,7 +14,7 @@ defmodule StillWeb.RouteComponents do
   def routes_list(assigns) do
     ~H"""
     <div :if={@routes != []} class="space-y-3">
-      <article :for={route <- @routes} class="hairline overflow-hidden rounded-lg border">
+      <article :for={route <- @routes} class="card-surface overflow-hidden rounded-2xl">
         <header class="hairline flex flex-wrap items-center justify-between gap-2 border-b bg-paper-100/60 px-5 py-3 dark:bg-ink-700/40">
           <div class="flex flex-wrap items-center gap-2">
             <.link
@@ -51,7 +51,7 @@ defmodule StillWeb.RouteComponents do
 
     <p
       :if={@routes == []}
-      class="hairline rounded-lg border px-5 py-6 text-center text-[13px] text-paper-500 dark:text-ink-300"
+      class="card-surface rounded-2xl px-5 py-6 text-center text-[13px] text-paper-500 dark:text-ink-300"
     >
       No routes yet. Create an application and assign servers to populate this view.
     </p>

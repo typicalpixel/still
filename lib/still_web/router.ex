@@ -141,6 +141,7 @@ defmodule StillWeb.Router do
       live "/caddy", CaddyLive, :index
       live "/account", AccountLive, :show
       live "/settings", SettingsLive, :index
+      live "/settings/audit", AuditLive, :index
     end
   end
 

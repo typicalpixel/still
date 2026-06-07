@@ -7,20 +7,33 @@ defmodule StillWeb.UserLive.Login do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-sm space-y-4">
-        <.header>
-          Log in to Still
-          <:subtitle>Enter your email and password.</:subtitle>
-        </.header>
-
-        <.form
-          :let={f}
-          for={@form}
-          id="login_form"
-          action={~p"/users/log-in"}
-          phx-submit="submit"
-          phx-trigger-action={@trigger_submit}
+      <div class="relative isolate flex min-h-[calc(100vh-3rem)] items-center justify-center">
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-2/3 bg-[radial-gradient(60%_80%_at_50%_120%,color-mix(in_srgb,var(--color-tide)_22%,transparent),transparent_60%)]"
+          aria-hidden="true"
         >
+        </div>
+
+        <div class="w-full max-w-sm">
+          <div class="mb-6 flex flex-col items-center text-center">
+            <.sail class="h-9 w-auto text-paper-900 dark:text-ink-50" />
+            <h1 class="mt-4 font-display text-[26px] font-medium tracking-[-0.02em] text-paper-900 dark:text-ink-50">
+              Log in to Still
+            </h1>
+            <p class="mt-1 text-[13px] text-paper-500 dark:text-ink-300">
+              Enter your email and password.
+            </p>
+          </div>
+
+          <div class="card-surface rounded-2xl p-6">
+            <.form
+              :let={f}
+              for={@form}
+              id="login_form"
+              action={~p"/users/log-in"}
+              phx-submit="submit"
+              phx-trigger-action={@trigger_submit}
+            >
           <.input
             field={f[:email]}
             type="email"
@@ -41,7 +54,9 @@ defmodule StillWeb.UserLive.Login do
           <.button class="btn btn-primary w-full" phx-disable-with="Logging in...">
             Log in <span aria-hidden="true">→</span>
           </.button>
-        </.form>
+            </.form>
+          </div>
+        </div>
       </div>
     </Layouts.app>
     """

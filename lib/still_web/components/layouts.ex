@@ -63,26 +63,21 @@ defmodule StillWeb.Layouts do
       assigns
       |> assign(:app_count, assigns.nav[:apps])
       |> assign(:server_count, server_count)
-      |> assign(:mode, mode_label(server_count))
       |> assign(:crumbs, crumbs(assigns))
 
     ~H"""
-    <div class="flex min-h-screen bg-paper-50 text-paper-900 dark:bg-ink-800 dark:text-ink-50">
+    <div class="flex min-h-screen bg-paper-50 text-paper-900 dark:bg-abyss dark:text-ink-50">
       <aside
         :if={@current_scope}
-        class="hairline sticky top-0 z-20 flex h-screen w-14 shrink-0 flex-col border-r bg-paper-50 md:w-52 dark:bg-ink-900"
+        class="hairline sticky top-0 z-20 flex h-screen w-14 shrink-0 flex-col border-r bg-paper-50 md:w-52 dark:bg-abyss"
       >
         <div class="px-4 pt-5 pb-4 md:px-5">
-          <.link navigate={~p"/"} class="flex items-center gap-2">
-            <span class="hidden text-lg font-semibold lowercase md:inline">still</span>
+          <.link navigate={~p"/"} class="flex items-center gap-2.5 text-paper-900 dark:text-ink-50">
+            <.sail class="h-[22px] w-auto shrink-0 -translate-y-[2px]" />
+            <span class="hidden font-display text-[19px] font-medium tracking-[-0.01em] md:inline">
+              Still
+            </span>
           </.link>
-        </div>
-
-        <div :if={@mode} class="hidden px-3 pb-2 md:block">
-          <span class="mono flex w-full items-center gap-1 rounded-sm bg-paper-200 px-1.5 py-px text-[11.5px] font-medium tracking-[-0.005em] text-paper-700 dark:bg-ink-600 dark:text-ink-100">
-            <.status_dot status={if @server_count <= 1, do: :neutral, else: :plum} />
-            {@mode}
-          </span>
         </div>
 
         <nav class="flex flex-1 flex-col gap-0.5 px-2 py-2">
@@ -167,7 +162,7 @@ defmodule StillWeb.Layouts do
           <div
             id="user-menu"
             role="menu"
-            class="hairline absolute bottom-full left-3 z-30 mb-2 hidden w-56 overflow-hidden rounded-lg border bg-paper-50 shadow-lg dark:bg-ink-800"
+            class="card-surface absolute bottom-full left-3 z-30 mb-2 hidden w-56 overflow-hidden rounded-xl shadow-lg"
           >
             <div class="hairline border-b px-3 py-2">
               <div class="truncate text-[12.5px] text-paper-800 dark:text-ink-50">
@@ -199,7 +194,7 @@ defmodule StillWeb.Layouts do
       <main class="flex min-w-0 flex-1 flex-col">
         <div
           :if={@current_scope && @crumbs != []}
-          class="hairline flex items-center gap-1.5 border-b px-5 py-3 md:px-7"
+          class="hairline flex h-11 items-center gap-1.5 border-b px-5 text-[12.5px] md:px-7"
         >
           <span :for={{bc, i} <- Enum.with_index(@crumbs)} class="flex items-center gap-1.5">
             <span :if={i > 0} class="text-paper-400 dark:text-ink-400">/</span>
@@ -231,10 +226,6 @@ defmodule StillWeb.Layouts do
   end
 
   defp user_display_name(user), do: user.name || user.email
-
-  defp mode_label(nil), do: nil
-  defp mode_label(count) when count <= 1, do: "standalone"
-  defp mode_label(_count), do: "multi-node"
 
   defp crumbs(assigns) do
     cond do

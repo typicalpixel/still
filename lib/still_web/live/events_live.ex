@@ -48,10 +48,10 @@ defmodule StillWeb.EventsLive do
         <.link
           :for={
             {value, label} <- [
-              all: "all",
-              deployment: "deployments",
-              health: "health",
-              server: "servers"
+              all: "All",
+              deployment: "Deployments",
+              health: "Health",
+              server: "Servers"
             ]
           }
           patch={filter_path(value)}

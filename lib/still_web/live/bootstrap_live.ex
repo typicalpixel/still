@@ -33,20 +33,33 @@ defmodule StillWeb.BootstrapLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-md space-y-4">
-        <.header>
-          Set up Still
-          <:subtitle>Create the first admin account. You can add more users later.</:subtitle>
-        </.header>
-
-        <.form
-          :let={f}
-          for={@form}
-          id="bootstrap-form"
-          action={~p"/users/log-in"}
-          phx-submit="submit"
-          phx-trigger-action={@trigger_submit}
+      <div class="relative isolate flex min-h-[calc(100vh-3rem)] items-center justify-center">
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-2/3 bg-[radial-gradient(60%_80%_at_50%_120%,color-mix(in_srgb,var(--color-tide)_22%,transparent),transparent_60%)]"
+          aria-hidden="true"
         >
+        </div>
+
+        <div class="w-full max-w-md">
+          <div class="mb-6 flex flex-col items-center text-center">
+            <.sloop class="h-16 w-auto text-paper-900 dark:text-ink-50" />
+            <h1 class="mt-4 font-display text-[26px] font-medium tracking-[-0.02em] text-paper-900 dark:text-ink-50">
+              Set up Still
+            </h1>
+            <p class="mt-1 text-[13px] text-paper-500 dark:text-ink-300">
+              Create the first admin account. You can add more users later.
+            </p>
+          </div>
+
+          <div class="card-surface rounded-2xl p-6">
+            <.form
+              :let={f}
+              for={@form}
+              id="bootstrap-form"
+              action={~p"/users/log-in"}
+              phx-submit="submit"
+              phx-trigger-action={@trigger_submit}
+            >
           <.input
             field={f[:email]}
             type="email"
@@ -71,10 +84,12 @@ defmodule StillWeb.BootstrapLive do
             required
           />
           <p :if={@error} class="text-[13px] text-rust-700 dark:text-rust-300">{@error}</p>
-          <.button class="btn btn-primary w-full" phx-disable-with="Creating…">
-            Create admin account <span aria-hidden="true">→</span>
-          </.button>
-        </.form>
+              <.button class="btn btn-primary w-full" phx-disable-with="Creating…">
+                Create admin account <span aria-hidden="true">→</span>
+              </.button>
+            </.form>
+          </div>
+        </div>
       </div>
     </Layouts.app>
     """

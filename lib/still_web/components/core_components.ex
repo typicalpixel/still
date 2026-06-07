@@ -246,7 +246,7 @@ defmodule StillWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300"
+          class="mb-1.5 block text-[12px] font-medium text-paper-600 dark:text-ink-200"
         >{@label}</span>
         <select
           id={@id}
@@ -270,7 +270,7 @@ defmodule StillWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300"
+          class="mb-1.5 block text-[12px] font-medium text-paper-600 dark:text-ink-200"
         >{@label}</span>
         <textarea
           id={@id}
@@ -294,7 +294,7 @@ defmodule StillWeb.CoreComponents do
       <label for={@id}>
         <span
           :if={@label}
-          class="mb-1 block text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300"
+          class="mb-1.5 block text-[12px] font-medium text-paper-600 dark:text-ink-200"
         >{@label}</span>
         <input
           type={@type}
@@ -334,7 +334,7 @@ defmodule StillWeb.CoreComponents do
     ~H"""
     <header class={[@actions != [] && "flex items-end justify-between gap-6", "pb-4"]}>
       <div>
-        <h1 class="text-[22px] font-semibold tracking-tight text-paper-900 dark:text-ink-50">
+        <h1 class="font-display text-[26px] font-medium tracking-[-0.02em] text-paper-900 dark:text-ink-50">
           {render_slot(@inner_block)}
         </h1>
         <p :if={@subtitle != []} class="mt-1 text-[12.5px] text-paper-500 dark:text-ink-300">
@@ -378,13 +378,13 @@ defmodule StillWeb.CoreComponents do
       end
 
     ~H"""
-    <div class="hairline overflow-x-auto rounded-lg border">
+    <div class="card-surface overflow-x-auto rounded-2xl">
       <table class="w-full">
         <thead>
           <tr class="hairline border-b bg-paper-100/60 dark:bg-ink-700/40">
             <th
               :for={col <- @col}
-              class="px-5 py-2 text-left text-[11px] font-medium tracking-[0.06em] text-paper-500 uppercase dark:text-ink-300"
+              class="px-5 py-2.5 text-left text-[12px] font-semibold text-paper-600 dark:text-ink-200"
             >
               {col[:label]}
             </th>
@@ -397,7 +397,7 @@ defmodule StillWeb.CoreComponents do
           <tr
             :for={row <- @rows}
             id={@row_id && @row_id.(row)}
-            class="hairline border-b last:border-b-0 hover:bg-paper-100/40 dark:hover:bg-ink-700/20"
+            class="hairline border-b last:border-b-0 hover:bg-paper-100 dark:hover:bg-ink-700/30"
           >
             <td
               :for={col <- @col}
@@ -474,6 +474,65 @@ defmodule StillWeb.CoreComponents do
   def icon(%{name: "hero-" <> _} = assigns) do
     ~H"""
     <span class={[@name, @class]} />
+    """
+  end
+
+  @doc """
+  The Still sail mark. Fills `currentColor`, so it recolors with the
+  surrounding text (foam on dark, ink on light).
+
+  ## Examples
+
+      <.sail class="h-6 w-auto text-paper-900 dark:text-ink-50" />
+  """
+  attr :class, :any, default: "h-6 w-auto"
+  attr :title, :string, default: nil
+
+  def sail(assigns) do
+    ~H"""
+    <svg
+      viewBox="0 0 46 72"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      class={@class}
+      role={@title && "img"}
+      aria-hidden={!@title && "true"}
+    >
+      <title :if={@title}>{@title}</title>
+      <path d="M46 61C44.4175 28.5798 38.693 16.3374 24 0C23 33.5 15 55 0 72C20.3837 65.4466 31.197 62.3456 46 61Z" />
+    </svg>
+    """
+  end
+
+  @doc """
+  The full Still sloop mark — sail, hull, and pennant. Fills `currentColor`.
+  Use it in spacious, ceremonial spots (first-run setup); prefer `sail/1` for
+  compact chrome.
+
+  ## Examples
+
+      <.sloop class="h-16 w-auto text-paper-900 dark:text-ink-50" />
+  """
+  attr :class, :any, default: "h-16 w-auto"
+  attr :title, :string, default: nil
+
+  def sloop(assigns) do
+    ~H"""
+    <svg
+      viewBox="0 0 176 184"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      class={@class}
+      role={@title && "img"}
+      aria-hidden={!@title && "true"}
+    >
+      <title :if={@title}>{@title}</title>
+      <path d="M89.5 36C86.5151 79.6525 84.1133 104.834 77 152.5C57.1493 153.581 45.9734 155.486 26 160C56.2714 120.063 70.4955 93.4109 89.5 36Z" />
+      <path d="M151.5 146C125.828 145.813 110.647 147.699 83 152.5C99.5 115.5 103.772 77.4061 94.5 13.5C130.5 48 147.824 82.1897 151.5 146Z" />
+      <path d="M0 175C64.6842 165.56 103.625 162.89 175.5 160.5C154.378 167.838 144.775 171.767 137 178C159.246 180.053 169.112 181.262 174.5 184C129.5 175 55 190 0 175Z" />
+      <path d="M82 175.5L81 145C78.6504 161.118 77.2853 169.091 74.5 175.5H82Z" />
+      <path d="M122.5 10.5C124.314 8.07592 126.031 6.73929 129.5 4.5C105.5 7 114 1 94 0C94.5681 5.71847 94.4646 8.30289 94 12.5C116 12.5 101.5 17 130.5 15.5C127.459 14.0177 125.702 12.891 122.5 10.5Z" />
+    </svg>
     """
   end
 

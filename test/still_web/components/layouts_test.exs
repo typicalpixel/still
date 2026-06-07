@@ -45,7 +45,7 @@ defmodule StillWeb.LayoutsTest do
       assert html =~ "Body content"
     end
 
-    test "shows multi-node mode and sidebar counts when nav has multiple servers" do
+    test "shows sidebar counts from nav" do
       assigns = %{}
 
       html =
@@ -60,9 +60,11 @@ defmodule StillWeb.LayoutsTest do
         </Layouts.app>
         """)
 
-      assert html =~ "multi-node"
-      # the multi-node mode dot uses the plum accent
-      assert html =~ "bg-plum-500"
+      # apps + servers counts render as chips on their nav items
+      assert html =~ "Applications"
+      assert html =~ "Servers"
+      assert html =~ "min-w-5"
+      assert html =~ "3"
     end
   end
 

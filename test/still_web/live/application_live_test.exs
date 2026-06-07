@@ -80,6 +80,14 @@ defmodule StillWeb.ApplicationLiveTest do
       assert html =~ "Lifecycle hooks"
     end
 
+    test "labels a local-file artifact source in the header", %{conn: conn} do
+      application_fixture(%{name: "local-app", artifact_source: %{type: :local_file}})
+
+      {:ok, _lv, html} = live(conn, ~p"/applications/local-app")
+
+      assert html =~ "Local file"
+    end
+
     test "renders not-found for an unknown name", %{conn: conn} do
       {:ok, _lv, html} = live(conn, ~p"/applications/nope")
       assert html =~ "Application not found"
@@ -462,7 +470,7 @@ defmodule StillWeb.ApplicationLiveTest do
       {:ok, lv, _html} = live(conn, ~p"/applications/api")
 
       lv |> element("button", "Add hook") |> render_click()
-      lv |> element("#hook-form-form button", "post_deploy") |> render_click()
+      lv |> element("#hook-form-form button", "Post-deploy") |> render_click()
 
       assert lv
              |> form("#hook-form-form", %{hook: %{script: "", timeout_ms: "30000"}})
@@ -474,7 +482,7 @@ defmodule StillWeb.ApplicationLiveTest do
         |> render_submit()
 
       assert html =~ "Hook saved"
-      assert html =~ "post_deploy"
+      assert html =~ "Post-deploy"
     end
 
     test "edits a hook", %{conn: conn} do

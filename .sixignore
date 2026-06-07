@@ -19,6 +19,7 @@ lib/still/agent/systemd.ex d9073d89
 lib/still/agent_connection_manager.ex init 650143be
 lib/still/artifact_store.ex file_mtime 77e8de8c
 lib/still/caddy_metrics_scraper.ex 1f3b38b5
+lib/still/dev/maple_demo.ex c8d33e7d
 lib/still/dev/standalone.ex ed8fd291
 lib/still/orchestrator.ex 3e2e37c1
 lib/still/orchestrator.ex execute_rolling_deploy 01165896
