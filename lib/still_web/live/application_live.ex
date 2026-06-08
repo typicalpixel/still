@@ -74,7 +74,20 @@ defmodule StillWeb.ApplicationLive do
           {@app.name}<.application_display type={@app.type} />
         </span>
         <:subtitle>
-          version {common_version(@status)}<span :if={@app.domain}> · <span class="mono">{@app.domain}</span></span> · artifact {@app.artifact_source.type}
+          <span class="inline-flex flex-wrap items-baseline gap-x-5 gap-y-1">
+            <span class="inline-flex items-baseline gap-1.5">
+              <span class="text-paper-500 dark:text-ink-300">Version</span>
+              <span class="mono font-medium text-paper-800 dark:text-ink-50">
+                {common_version(@status)}
+              </span>
+            </span>
+            <span :if={@app.domain} class="inline-flex items-baseline gap-1.5 text-paper-400 dark:text-ink-500">
+              Domain <span class="mono">{@app.domain}</span>
+            </span>
+            <span class="inline-flex items-baseline gap-1.5 text-paper-400 dark:text-ink-500">
+              Artifact <span class="mono">{artifact_label(@app.artifact_source.type)}</span>
+            </span>
+          </span>
         </:subtitle>
         <:actions>
           <span :if={not @has_servers} class="mr-1 text-[12.5px] text-paper-500 dark:text-ink-300">
@@ -210,7 +223,7 @@ defmodule StillWeb.ApplicationLive do
       </section>
 
       <section :if={@can_admin} class="mt-8">
-        <h2 class="mb-2 text-[11px] font-medium tracking-[0.08em] text-rust-700 uppercase dark:text-rust-300">
+        <h2 class="mb-2 text-[13px] font-semibold text-rust-700 dark:text-rust-300">
           Danger zone
         </h2>
         <div class="flex items-center justify-between gap-6 rounded-lg border border-rust-300 p-4 dark:border-rust-700/60">
@@ -827,6 +840,9 @@ defmodule StillWeb.ApplicationLive do
     do: to_form(%{"version" => "", "artifact_url" => "", "source" => ""}, as: :deploy)
 
   defp initiated_by(socket), do: "user:#{socket.assigns.current_scope.user.email}"
+
+  defp artifact_label(:unauthenticated_url), do: "Public URL"
+  defp artifact_label(:local_file), do: "Local file"
 
   defp build_fleet(status, servers_by_id, assignment_ids) do
     for {row, report, live} <- status.assigned do

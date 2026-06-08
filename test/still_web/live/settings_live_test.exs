@@ -47,7 +47,7 @@ defmodule StillWeb.SettingsLiveTest do
 
       assert html =~ "Settings"
       assert html =~ "API version"
-      assert html =~ "standalone"
+      assert html =~ "Standalone"
       assert html =~ "0 of 0 hosts connected"
       assert html =~ "Audit log"
       assert html =~ "user created"
@@ -63,7 +63,7 @@ defmodule StillWeb.SettingsLiveTest do
 
       {:ok, _lv, html} = live(conn, ~p"/settings")
 
-      assert html =~ "multi-node"
+      assert html =~ "Multi-node"
       assert html =~ "mixed"
       assert html =~ "2 of 2 hosts connected"
     end
@@ -75,14 +75,14 @@ defmodule StillWeb.SettingsLiveTest do
       {:ok, _lv, html} = live(conn, ~p"/settings")
 
       assert html =~ "v1.0.0"
-      assert html =~ "standalone"
+      assert html =~ "Standalone"
     end
 
     test "filters the audit log by each preset", %{conn: conn} do
       audit_event_fixture(%{type: "application_created", subject_type: :application})
       audit_event_fixture(%{type: "login_succeeded"})
 
-      {:ok, lv, _html} = live(conn, ~p"/settings")
+      {:ok, lv, _html} = live(conn, ~p"/settings/audit")
 
       for preset <- ~w(applications servers users auth all) do
         assert lv |> element("button[phx-value-preset=#{preset}]") |> render_click() =~

@@ -83,6 +83,7 @@ defmodule StillWeb.DeploymentComponents do
       id="deploys"
       rows={@deployments}
       row_id={fn d -> "deploy-#{d.id}" end}
+      row_click={fn d -> JS.navigate(~p"/deployments/#{d.id}") end}
     >
       <:col :let={d} label="Deploy">
         <.link navigate={~p"/deployments/#{d.id}"} class="font-mono text-[12px] text-paper-500 dark:text-ink-300 hover:underline">
@@ -113,12 +114,15 @@ defmodule StillWeb.DeploymentComponents do
       id="deployments"
       rows={@deployments}
       row_id={fn d -> "deployment-#{d.id}" end}
+      row_click={fn d -> JS.navigate(~p"/deployments/#{d.id}") end}
     >
       <:col :let={d} label="Application">
-        <.link navigate={~p"/deployments/#{d.id}"} class="hover:underline">
-          <div class="font-mono">{d.application.name}</div>
-          <div class="font-mono text-[12px] text-paper-500 dark:text-ink-300">{String.slice(d.id, 0, 8)}</div>
-        </.link>
+        <span class="font-mono font-medium text-paper-900 dark:text-ink-50">{d.application.name}</span>
+      </:col>
+      <:col :let={d} label="Deploy">
+        <span class="font-mono text-[12px] text-paper-500 dark:text-ink-300">
+          {String.slice(d.id, 0, 8)}
+        </span>
       </:col>
       <:col :let={d} label="Status">
         <span class="inline-flex items-center gap-2">
@@ -172,7 +176,7 @@ defmodule StillWeb.DeploymentComponents do
 
   def deployment_progress(assigns) do
     ~H"""
-    <div class="rounded-lg hairline border p-4">
+    <div class="card-surface rounded-2xl p-4">
       <div class="mb-2 flex items-baseline justify-between gap-4">
         <span class="text-[13px] font-medium text-paper-800 dark:text-ink-50">Overall progress</span>
         <span class="font-mono text-[12px] tabular-nums text-paper-500 dark:text-ink-300">
@@ -214,25 +218,58 @@ defmodule StillWeb.DeploymentComponents do
     """
   end
 
-  @doc "The deploy log section — a placeholder until streaming lands in v0.2.0."
+  @doc """
+  The deploy log section. `log` is the captured deploy-log text for the
+  deployment (per `PLAN_deployment_logs.md`: the journal captured over the
+  deploy window). `nil`/empty shows the streaming-soon note. Lines are
+  colorized from their leading marker at render time — the data stays plain
+  text.
+  """
   attr :deployment, :map, required: true
+  attr :log, :string, default: nil
 
   def deployment_log(assigns) do
+    assigns = assign(assigns, :log_lines, log_lines(assigns.log))
+
     ~H"""
-    <div class="mb-2 flex items-baseline justify-between gap-4">
-      <h2 class="text-[13px] font-medium text-paper-800 dark:text-ink-50">
-        {if in_flight?(@deployment), do: "Live log", else: "Log"}
-      </h2>
-      <span class="font-mono text-[11px] text-paper-400 italic dark:text-ink-500">
+    <h2 class="mb-2 text-[13px] font-medium text-paper-800 dark:text-ink-50">
+      {if in_flight?(@deployment), do: "Live log", else: "Log"}
+    </h2>
+    <div class="code-surface overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)] ring-1 ring-white/[0.06]">
+      <pre class="max-h-80 min-h-40 overflow-auto px-4 py-3.5 font-mono text-xs leading-relaxed"><span
+          :for={line <- @log_lines}
+          class="block"
+          style={"color:#{log_tone(line)}"}
+        >{line}</span><span :if={in_flight?(@deployment)} class="animate-pulse" style="color:#7aa2f7">▌</span></pre>
+    </div>
+    <div
+      :if={(last_seen(@deployment) && not in_flight?(@deployment)) or @log_lines == []}
+      class="mt-2 flex items-center justify-between gap-4 text-[12px]"
+    >
+      <span
+        :if={last_seen(@deployment) && not in_flight?(@deployment)}
+        class="text-paper-500 dark:text-ink-300"
+      >
+        last activity {relative_time(last_seen(@deployment))}
+      </span>
+      <span
+        :if={@log_lines == []}
+        class="ml-auto font-mono text-[11px] text-paper-400 italic dark:text-ink-500"
+      >
         streaming arrives in v0.2.0
       </span>
     </div>
-    <pre class="max-h-80 min-h-40 overflow-auto rounded-lg bg-neutral p-4 font-mono text-xs text-neutral-content"><span :if={in_flight?(@deployment)} class="animate-pulse text-info">▌</span></pre>
-    <p :if={last_seen(@deployment) && not in_flight?(@deployment)} class="mt-2 text-[12px] text-paper-500 dark:text-ink-300">
-      last activity {relative_time(last_seen(@deployment))}
-    </p>
     """
   end
+
+  defp log_lines(nil), do: []
+  defp log_lines(""), do: []
+  defp log_lines(text), do: String.split(text, "\n")
+
+  # Tokyo Night tones derived from the line's leading marker (presentation only).
+  defp log_tone("✓" <> _), do: "#9ece6a"
+  defp log_tone("  " <> _), do: "#6b7394"
+  defp log_tone(_line), do: "#c0caf5"
 
   @doc "The start-deploy dialog for the deployments index — pick an application, then version/artifact."
   attr :show, :boolean, required: true

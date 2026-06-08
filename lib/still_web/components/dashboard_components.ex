@@ -36,14 +36,25 @@ defmodule StillWeb.DashboardComponents do
 
   # Maps both the dashboard's tone vocabulary (healthy/warn/danger/info/neutral)
   # and the domain words callers pass directly onto daisyUI semantic colors.
+  # Colored tones set text + bg to the same role so `.status-dot` glows with
+  # `currentColor`; attention tones (failed/degraded/in-flight) also get the
+  # radar ping for a little movement, while resting/healthy/neutral stay calm.
   defp status_color(status) do
     case status |> to_string() |> String.downcase() do
-      s when s in ~w(connected healthy up running active ok) -> "bg-success"
-      s when s in ~w(disconnected unhealthy down failed error danger stopped) -> "bg-error"
-      s when s in ~w(degraded pending starting deploying warn) -> "bg-warning"
-      "info" -> "bg-info"
-      "plum" -> "bg-plum-500"
-      _ -> "bg-paper-400 dark:bg-ink-400"
+      s when s in ~w(connected healthy up running active ok) ->
+        "status-dot bg-success text-success"
+
+      s when s in ~w(disconnected unhealthy down failed error danger stopped) ->
+        "status-dot status-dot-ping bg-error text-error"
+
+      s when s in ~w(degraded pending starting deploying warn) ->
+        "status-dot status-dot-ping bg-warning text-warning"
+
+      "info" ->
+        "status-dot status-dot-ping bg-info text-info"
+
+      _ ->
+        "bg-paper-400 dark:bg-ink-400"
     end
   end
 
@@ -140,7 +151,7 @@ defmodule StillWeb.DashboardComponents do
       preserveAspectRatio="none"
       fill="none"
       aria-hidden="true"
-      class="block w-full overflow-visible"
+      class="block w-full overflow-visible text-tide-deep/80 dark:text-tide/75"
     >
       <path
         d={@path}
@@ -210,7 +221,7 @@ defmodule StillWeb.DashboardComponents do
 
   def panel(assigns) do
     ~H"""
-    <section class={["hairline rounded-lg border bg-paper-50 dark:bg-ink-800", @class]}>
+    <section class={["card-surface rounded-2xl", @class]}>
       <div
         :if={@title != []}
         class={[
@@ -251,7 +262,7 @@ defmodule StillWeb.DashboardComponents do
   def section_heading(assigns) do
     ~H"""
     <div class={["mb-2 flex items-center justify-between gap-3", @class]}>
-      <h2 class="text-[11px] font-medium tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300">
+      <h2 class="text-[13px] font-semibold text-paper-800 dark:text-ink-50">
         {render_slot(@inner_block)}
       </h2>
       <div :if={@actions != []} class="flex items-center gap-2">{render_slot(@actions)}</div>
@@ -265,8 +276,8 @@ defmodule StillWeb.DashboardComponents do
 
   def stat_card(assigns) do
     ~H"""
-    <div class="hairline rounded-lg border bg-paper-50 p-4 dark:bg-ink-800">
-      <div class="text-[11px] font-medium tracking-[0.06em] text-paper-500 uppercase dark:text-ink-300">
+    <div class="card-surface rounded-2xl p-4">
+      <div class="text-[12px] font-medium text-paper-500 dark:text-ink-300">
         {@label}
       </div>
       <div class="mt-1">{render_slot(@inner_block)}</div>
@@ -319,18 +330,24 @@ defmodule StillWeb.DashboardComponents do
     ~H"""
     <.link
       navigate={@navigate}
+      aria-current={@active && "page"}
       class={[
-        "flex items-center gap-2.5 rounded-[5px] px-2.5 py-1.5 text-[13px] transition-colors",
-        @active && "bg-paper-100 font-medium text-paper-900 dark:bg-ink-700 dark:text-ink-50",
+        "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors",
+        @active &&
+          "bg-tide-deep/10 font-medium text-tide-deep dark:bg-tide/10 dark:text-tide-bright",
         !@active &&
-          "text-paper-600 hover:bg-paper-100/60 dark:text-ink-200 dark:hover:bg-ink-700/60"
+          "text-paper-600 hover:bg-paper-200/80 hover:text-paper-900 dark:text-ink-200 dark:hover:bg-ink-700/60 dark:hover:text-ink-50"
       ]}
     >
       <.icon name={@icon} class="size-4 shrink-0 opacity-80" />
       <span class="hidden truncate md:inline">{@label}</span>
       <span
         :if={@count != nil}
-        class="mono ml-auto hidden text-[10.5px] text-paper-500 md:inline dark:text-ink-300"
+        class={[
+          "mono ml-auto hidden min-w-5 rounded-md px-1.5 py-px text-center text-[11px] md:inline",
+          @active && "bg-tide-deep/15 text-tide-deep dark:bg-tide/15 dark:text-tide-bright",
+          !@active && "bg-paper-200 text-paper-600 dark:bg-ink-700 dark:text-ink-200"
+        ]}
       >
         {@count}
       </span>
@@ -459,7 +476,7 @@ defmodule StillWeb.DashboardComponents do
 
   def activity_feed(assigns) do
     ~H"""
-    <div :if={@activities != []} class="hairline overflow-hidden rounded-lg border">
+    <div :if={@activities != []} class="card-surface overflow-hidden rounded-2xl">
       <div
         :for={activity <- @activities}
         id={"event-#{activity.id}"}
@@ -500,6 +517,11 @@ defmodule StillWeb.DashboardComponents do
   attr :id, :string, required: true
   attr :show, :boolean, default: false
   attr :on_cancel, :string, default: nil, doc: "phx-click event that closes the modal"
+
+  attr :class, :string,
+    default: nil,
+    doc: "extra classes on the modal box, e.g. a wider max-width"
+
   slot :title
   slot :inner_block, required: true
 
@@ -514,7 +536,7 @@ defmodule StillWeb.DashboardComponents do
       phx-window-keydown={@on_cancel}
       phx-key="escape"
     >
-      <div class="modal-box hairline border p-0 shadow-2xl">
+      <div class={["modal-box card-surface rounded-2xl p-0 shadow-2xl", @class]}>
         <div
           :if={@title != []}
           class="hairline flex items-center justify-between gap-4 border-b px-5 py-4"

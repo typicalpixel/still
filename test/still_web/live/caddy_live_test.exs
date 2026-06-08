@@ -27,7 +27,6 @@ defmodule StillWeb.CaddyLiveTest do
 
       assert html =~ "Caddy config"
       assert html =~ "still_internal" or html =~ "8080"
-      assert html =~ "Controller"
     end
 
     test "shows an error when Caddy's admin API is unreachable", %{conn: conn} do
@@ -43,6 +42,8 @@ defmodule StillWeb.CaddyLiveTest do
       start_supervised!(Still.AgentConnectionManager)
       stub_config(%{"apps" => %{}})
       server = server_fixture(%{name: "edge-1"})
+      # A second host makes it multi-node, so the node picker is shown.
+      server_fixture(%{name: "edge-2"})
 
       {:ok, lv, _html} = live(conn, ~p"/caddy")
 

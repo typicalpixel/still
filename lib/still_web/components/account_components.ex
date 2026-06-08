@@ -56,7 +56,7 @@ defmodule StillWeb.AccountComponents do
       <:title>Appearance</:title>
       <:subtitle>Theme applies to this browser only. "System" follows your OS preference.</:subtitle>
 
-      <div class="mb-2 text-[11.5px] tracking-[0.08em] text-paper-500 uppercase dark:text-ink-300">
+      <div class="mb-2 text-[12px] font-medium text-paper-600 dark:text-ink-200">
         Theme
       </div>
       <div
