@@ -61,7 +61,7 @@ defmodule StillWeb.ApplicationsLiveTest do
       {:ok, _lv, html} = live(conn, ~p"/applications")
 
       assert html =~ "api"
-      assert html =~ "elixir"
+      assert html =~ "Elixir"
       assert html =~ "1.0.0"
       assert html =~ "1 applications · 1 healthy"
     end

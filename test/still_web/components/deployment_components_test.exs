@@ -291,5 +291,32 @@ defmodule StillWeb.DeploymentComponentsTest do
       assert html =~ "Log"
       assert html =~ "last activity"
     end
+
+    test "renders captured log lines, colorized by leading marker" do
+      assigns = %{
+        deployment: %{
+          status: :in_progress,
+          started_at: ~U[2026-01-01 00:00:00Z],
+          completed_at: nil
+        },
+        log: "→ starting app\n  app listening on :4000\n✓ healthy — switching traffic"
+      }
+
+      html = rendered_to_string(~H|<.deployment_log deployment={@deployment} log={@log} />|)
+
+      assert html =~ "starting app"
+      assert html =~ "app listening on :4000"
+      assert html =~ "switching traffic"
+      # ✓ line → green, indented output → dim, default line → foam
+      assert html =~ "#9ece6a"
+      assert html =~ "#6b7394"
+      assert html =~ "#c0caf5"
+      # captured log replaces the streaming-soon placeholder
+      refute html =~ "streaming arrives in v0.2.0"
+
+      # an empty captured log falls back to the placeholder
+      empty = rendered_to_string(~H|<.deployment_log deployment={@deployment} log="" />|)
+      assert empty =~ "streaming arrives in v0.2.0"
+    end
   end
 end

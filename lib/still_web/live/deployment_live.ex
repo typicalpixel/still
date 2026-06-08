@@ -63,7 +63,7 @@ defmodule StillWeb.DeploymentLive do
       </section>
 
       <section class="mt-8">
-        <.deployment_log deployment={@deployment} />
+        <.deployment_log deployment={@deployment} log={@deploy_log} />
       </section>
     </Layouts.app>
     """
@@ -89,7 +89,15 @@ defmodule StillWeb.DeploymentLive do
         |> assign(:steps, build_steps(deployment, servers_by_id))
         |> assign(:progress, Deployment.progress(deployment))
         |> assign(:eta_at, Deployments.eta_at(deployment))
+        |> assign(:deploy_log, demo_deploy_log(deployment.id))
     end
+  end
+
+  # Captured deploy-log text per PLAN_deployment_logs.md. Until journal capture
+  # lands the source is empty in prod; a dev demo seed may populate it via the
+  # :demo_deploy_logs app env (keyed by deployment id) for marketing screenshots.
+  defp demo_deploy_log(id) do
+    :still |> Application.get_env(:demo_deploy_logs, %{}) |> Map.get(id)
   end
 
   defp build_steps(deployment, servers_by_id) do

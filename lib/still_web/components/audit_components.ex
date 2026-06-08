@@ -27,7 +27,7 @@ defmodule StillWeb.AuditComponents do
 
   def audit_log(assigns) do
     ~H"""
-    <div class="hairline overflow-hidden rounded-lg border">
+    <div class="card-surface overflow-hidden rounded-2xl">
       <div :for={event <- @events} class="hairline border-b last:border-b-0">
         <button
           type="button"
@@ -80,15 +80,15 @@ defmodule StillWeb.AuditComponents do
             <% end %>
             <%= if event.before do %>
               <dt class="text-paper-500 dark:text-ink-300">Before</dt>
-              <dd><pre class="hairline overflow-auto rounded-md border bg-paper-50 p-2 font-mono text-[12px] text-paper-700 dark:bg-ink-900 dark:text-ink-100">{json_preview(event.before)}</pre></dd>
+              <dd><pre class="code-surface overflow-auto rounded-md p-2 font-mono text-[12px] ring-1 ring-white/[0.06]">{json_preview(event.before)}</pre></dd>
             <% end %>
             <%= if event.after do %>
               <dt class="text-paper-500 dark:text-ink-300">After</dt>
-              <dd><pre class="hairline overflow-auto rounded-md border bg-paper-50 p-2 font-mono text-[12px] text-paper-700 dark:bg-ink-900 dark:text-ink-100">{json_preview(event.after)}</pre></dd>
+              <dd><pre class="code-surface overflow-auto rounded-md p-2 font-mono text-[12px] ring-1 ring-white/[0.06]">{json_preview(event.after)}</pre></dd>
             <% end %>
             <%= if map_size(event.payload || %{}) > 0 do %>
               <dt class="text-paper-500 dark:text-ink-300">Payload</dt>
-              <dd><pre class="hairline overflow-auto rounded-md border bg-paper-50 p-2 font-mono text-[12px] text-paper-700 dark:bg-ink-900 dark:text-ink-100">{json_preview(event.payload)}</pre></dd>
+              <dd><pre class="code-surface overflow-auto rounded-md p-2 font-mono text-[12px] ring-1 ring-white/[0.06]">{json_preview(event.payload)}</pre></dd>
             <% end %>
           </dl>
         </div>

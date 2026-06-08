@@ -151,9 +151,9 @@ defmodule StillWeb.ApplicationComponentsTest do
   describe "application_display/1" do
     test "renders a labelled type chip per runtime" do
       assigns = %{}
-      assert rendered_to_string(~H|<.application_display type={:elixir_release} />|) =~ "elixir"
-      assert rendered_to_string(~H|<.application_display type={:static_site} />|) =~ "static"
-      assert rendered_to_string(~H|<.application_display type={:process} />|) =~ "process"
+      assert rendered_to_string(~H|<.application_display type={:elixir_release} />|) =~ "Elixir"
+      assert rendered_to_string(~H|<.application_display type={:static_site} />|) =~ "Static"
+      assert rendered_to_string(~H|<.application_display type={:process} />|) =~ "Process"
     end
   end
 
@@ -184,7 +184,7 @@ defmodule StillWeb.ApplicationComponentsTest do
         rendered_to_string(~H|<.applications_table apps={@apps} last_deploys={@last_deploys} />|)
 
       assert html =~ "api"
-      assert html =~ "elixir"
+      assert html =~ "Elixir"
       assert html =~ "api.example.com"
       assert html =~ "1.0.0"
       assert html =~ "ago"
@@ -270,7 +270,7 @@ defmodule StillWeb.ApplicationComponentsTest do
       }
 
       html = rendered_to_string(~H|<.app_hooks hooks={@hooks} />|)
-      assert html =~ "pre_deploy"
+      assert html =~ "Pre-deploy"
       assert html =~ "echo deploying"
     end
 

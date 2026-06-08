@@ -14,9 +14,11 @@ defmodule StillWeb.ApiKeyComponents do
   def api_keys_table(assigns) do
     ~H"""
     <.table :if={@keys != []} id="api-keys" rows={@keys} row_id={fn k -> "api-key-#{k.id}" end}>
-      <:col :let={k} label="Name">
-        <div>{k.name}</div>
-        <div class="font-mono text-[12px] text-paper-500 dark:text-ink-300">id {String.slice(k.id, 0, 8)}</div>
+      <:col :let={k} label="Name"><span class="font-medium">{k.name}</span></:col>
+      <:col :let={k} label="ID">
+        <span class="font-mono text-[12px] text-paper-500 dark:text-ink-300">
+          {String.slice(k.id, 0, 8)}
+        </span>
       </:col>
       <:col :let={k} label="Permissions">
         <span class="flex flex-wrap gap-1"><.chip :for={p <- k.permissions}>{p}</.chip></span>
@@ -57,8 +59,8 @@ defmodule StillWeb.ApiKeyComponents do
 
       <div :if={@created} class="space-y-3">
         <p class="text-[13px] text-paper-500 dark:text-ink-300">Copy the key now — it will not be shown again.</p>
-        <div class="rounded-md hairline border bg-paper-100 dark:bg-ink-700/40 p-3">
-          <div class="mb-1 text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Raw key</div>
+        <div class="well-surface rounded-lg p-3">
+          <div class="mb-1 text-[12px] font-medium text-paper-600 dark:text-ink-200">Raw key</div>
           <div class="select-all break-all font-mono text-sm">{@created.raw_key}</div>
         </div>
         <p class="text-xs text-rust-700 dark:text-rust-300">
@@ -73,7 +75,7 @@ defmodule StillWeb.ApiKeyComponents do
         <.input field={@form[:name]} label="Name" placeholder="ci-bot" />
 
         <div>
-          <label class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Permissions</label>
+          <label class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Permissions</label>
           <div class="flex flex-wrap gap-1">
             <button
               :for={permission <- @all_permissions}

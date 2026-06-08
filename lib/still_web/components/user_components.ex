@@ -15,8 +15,15 @@ defmodule StillWeb.UserComponents do
     ~H"""
     <.table :if={@users != []} id="users" rows={@users} row_id={fn u -> "user-#{u.id}" end}>
       <:col :let={u} label="Name">
-        <div>{u.name}</div>
-        <div :if={u.id == @current_user_id} class="font-mono text-[12px] text-paper-500 dark:text-ink-300">you</div>
+        <span class="inline-flex items-center gap-2">
+          <span class="font-medium">{u.name}</span>
+          <span
+            :if={u.id == @current_user_id}
+            class="rounded-md bg-paper-200 px-1.5 py-px text-[11px] text-paper-600 dark:bg-ink-700 dark:text-ink-200"
+          >
+            you
+          </span>
+        </span>
       </:col>
       <:col :let={u} label="Email"><span class="font-mono text-sm">{u.email}</span></:col>
       <:col :let={u} label="Role"><.chip>{u.role}</.chip></:col>
@@ -68,7 +75,7 @@ defmodule StillWeb.UserComponents do
         <.input field={@form[:email]} type="email" label="Email" autocomplete="off" />
 
         <div>
-          <label class="mb-1 block text-[11.5px] uppercase tracking-[0.08em] text-paper-500 dark:text-ink-300">Role</label>
+          <label class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Role</label>
           <div class="flex flex-wrap gap-1">
             <button
               :for={role <- @roles}

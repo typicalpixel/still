@@ -29,7 +29,7 @@ defmodule StillWeb.RouteComponentsTest do
 
       html = rendered_to_string(~H|<.routes_list routes={@routes} />|)
       assert html =~ "api"
-      assert html =~ "elixir"
+      assert html =~ "Elixir"
       assert html =~ "api.example.com"
       assert html =~ "/v1"
       assert html =~ "web-1"

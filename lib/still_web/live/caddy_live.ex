@@ -18,14 +18,18 @@ defmodule StillWeb.CaddyLive do
 
     socket =
       if Scope.can?(socket.assigns.current_scope, :admin) do
+        servers = Fleet.list_servers()
+
         socket
         |> assign(:forbidden, false)
-        |> assign(:servers, Fleet.list_servers())
+        |> assign(:servers, servers)
+        |> assign(:multi_node?, length(servers) > 1)
         |> load_config()
       else
         socket
         |> assign(:forbidden, true)
         |> assign(:servers, [])
+        |> assign(:multi_node?, false)
         |> assign(:config, nil)
         |> assign(:error, nil)
       end
@@ -51,7 +55,7 @@ defmodule StillWeb.CaddyLive do
       </div>
 
       <div :if={!@forbidden} class="mt-4">
-        <form phx-change="select_target" class="mb-4 flex items-center gap-2">
+        <form :if={@multi_node?} phx-change="select_target" class="mb-4 flex items-center gap-2">
           <label for="caddy-target" class="text-[12px] text-paper-500 dark:text-ink-300">Node</label>
           <select id="caddy-target" name="target" class="select select-sm">
             <option value="controller" selected={@target == "controller"}>Controller</option>
@@ -70,7 +74,7 @@ defmodule StillWeb.CaddyLive do
 
         <pre
           :if={@config}
-          class="mono overflow-auto rounded-lg border border-paper-200 bg-paper-50 p-4 text-[12px] leading-relaxed text-paper-800 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-50"
+          class="code-surface mono overflow-auto rounded-2xl p-4 text-[12px] leading-relaxed ring-1 ring-white/[0.06]"
         ><%= @config %></pre>
       </div>
     </Layouts.app>

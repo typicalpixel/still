@@ -71,7 +71,7 @@ defmodule StillWeb.DeploymentsLive do
 
       <div class="mt-4 mb-3 flex flex-wrap items-center gap-2">
         <.link
-          :for={{value, label} <- [all: "all", in_flight: "in flight", failed: "failed"]}
+          :for={{value, label} <- [all: "All", in_flight: "In flight", failed: "Failed"]}
           patch={filter_path(@app_filter, value)}
           class={["badge", if(@status_filter == value, do: "badge-neutral", else: "badge-ghost")]}
         >

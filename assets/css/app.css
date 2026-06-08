@@ -11,112 +11,138 @@
   themes: false;
 }
 
-/* Self-hosted Geist (sans) + Geist Mono */
-@font-face {
-  font-family: "Geist";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/geist-400.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Geist";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/geist-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Geist";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/geist-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Geist";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/geist-700.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Geist Mono";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/geist-mono-400.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Geist Mono";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/geist-mono-500.woff2") format("woff2");
-}
-
-/* Paper (light) / ink (dark) palette + Geist fonts */
+/*
+ * Tidewater — the marketing-site brand mapped onto the dashboard.
+ * Fonts (Newsreader / Hanken Grotesk / JetBrains Mono) load from Google Fonts
+ * in the root layout, with system fallbacks so the app degrades cleanly offline.
+ */
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sans: "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --color-paper-50: #fafafa;
-  --color-paper-100: #f4f4f5;
-  --color-paper-200: #e4e4e7;
-  --color-paper-300: #d4d4d8;
-  --color-paper-400: #a1a1aa;
-  --color-paper-500: #71717a;
-  --color-paper-600: #52525b;
-  --color-paper-700: #3f3f46;
-  --color-paper-800: #27272a;
-  --color-paper-900: #18181b;
+  /* Tidewater base palette (the canonical hexes) */
+  --color-abyss: #07131d;
+  --color-deep: #0a1a28;
+  --color-surface: #0f2434;
+  --color-surface-2: #143049;
+  --color-shoal: #e8f0f0;
+  --color-shoal-2: #f1f6f6;
+  --color-brand-ink: #122c46;
+  --color-foam: #eaf1f6;
+  --color-mist: #a7bacb;
+  --color-depth: #6a8198;
+  --color-faint: #455c70;
+  --color-tide: #4fa6ce;
+  --color-tide-bright: #79c6e8;
+  --color-tide-deep: #2c7ba0;
 
-  --color-ink-50: #f8fafc;
-  --color-ink-100: #f1f5f9;
-  --color-ink-200: #e2e8f0;
-  --color-ink-300: #cbd5e1;
-  --color-ink-400: #94a3b8;
-  --color-ink-500: #64748b;
-  --color-ink-600: #475569;
-  --color-ink-700: #334155;
-  --color-ink-800: #0f172a;
-  --color-ink-900: #020617;
+  /* Light ramp — cool navy-tinted (drives the existing paper-* utilities) */
+  --color-paper-50: #e8f0f0;
+  --color-paper-100: #dde8ec;
+  --color-paper-200: #cad9e0;
+  --color-paper-300: #a9c0cb;
+  --color-paper-400: #607888;
+  --color-paper-500: #455c70;
+  --color-paper-600: #39526a;
+  --color-paper-700: #284563;
+  --color-paper-800: #1b3950;
+  --color-paper-900: #122c46;
 
-  --color-plum-50: #ece6f1;
-  --color-plum-100: #cfc0db;
-  --color-plum-500: #6f5289;
-  --color-plum-700: #4a3460;
+  /* Dark ramp — deep ocean (drives the existing ink-* utilities) */
+  --color-ink-50: #eaf1f6;
+  --color-ink-100: #dbe6ef;
+  --color-ink-200: #b9cad8;
+  --color-ink-300: #a7bacb;
+  --color-ink-400: #6a8198;
+  --color-ink-500: #748ea3;
+  --color-ink-600: #143049;
+  --color-ink-700: #1b3a52;
+  --color-ink-800: #0f2434;
+  --color-ink-900: #07131d;
 
-  --color-rust-50: #fcf4f1;
-  --color-rust-100: #f7e1d8;
-  --color-rust-200: #eec4b6;
-  --color-rust-300: #e0a48f;
-  --color-rust-400: #cd6f53;
-  --color-rust-500: #b6512f;
-  --color-rust-600: #9c3f23;
-  --color-rust-700: #7e331e;
-  --color-rust-800: #5f271a;
-  --color-rust-900: #4a2016;
+  /* App-type accents — functional color-coding, kept from the dashboard.
+     Saturated a touch so the chips don't get lost on the cool Tidewater surfaces. */
+  --color-plum-50: #efe1fb;
+  --color-plum-100: #d6bcee;
+  --color-plum-500: #7c4fb0;
+  --color-plum-700: #553a85;
+
+  /* Error/danger text ramp */
+  --color-rust-50: #fef2f2;
+  --color-rust-100: #fee2e2;
+  --color-rust-200: #fecaca;
+  --color-rust-300: #fca5a5;
+  --color-rust-400: #f87171;
+  --color-rust-500: #ef4444;
+  --color-rust-600: #dc2626;
+  --color-rust-700: #b91c1c;
+  --color-rust-800: #991b1b;
+  --color-rust-900: #7f1d1d;
+
+  /* Motion */
+  --animate-tide: tide 6s ease-in-out infinite;
 }
 
-/* daisyUI theme — paper (light), flat, 1px hairline */
+/* Semantic role tokens — mode-flipping. Exposed as Tailwind color utilities
+   (bg-panel, bg-well, text-content …) via @theme inline, and consumed by the
+   card/well/code utilities below. */
+@theme inline {
+  --color-panel: var(--panel);
+  --color-well: var(--well);
+  --color-content: var(--fg);
+  --color-content-2: var(--fg2);
+  --color-content-3: var(--fg3);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+}
+
+:root,
+[data-theme="light"] {
+  --panel: #ffffff;
+  --well: #f1f6f6;
+  --fg: #122c46;
+  --fg2: #455c70;
+  --fg3: #6a8198;
+  --accent: #2c7ba0;
+  --accent-strong: #4fa6ce;
+  --focus: #2c7ba0;
+  --line: rgba(13, 58, 82, 0.12);
+  --card-ring: 0 0 0 1px rgba(13, 58, 82, 0.08), 0 1px 2px rgba(13, 58, 82, 0.05),
+    0 10px 28px -16px rgba(13, 58, 82, 0.22);
+}
+
+[data-theme="dark"] {
+  --panel: #0f2434;
+  --well: #143049;
+  --fg: #eaf1f6;
+  --fg2: #a7bacb;
+  --fg3: #6a8198;
+  --accent: #4fa6ce;
+  --accent-strong: #79c6e8;
+  --focus: #4fa6ce;
+  --line: rgba(255, 255, 255, 0.07);
+  --card-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* daisyUI theme — Tidewater light (white controls on a shoal canvas) */
 @plugin "../vendor/daisyui-theme" {
   name: "light";
   default: true;
   prefersdark: false;
   color-scheme: "light";
-  --color-base-100: #fafafa;
-  --color-base-200: #f4f4f5;
-  --color-base-300: #e4e4e7;
-  --color-base-content: #18181b;
-  --color-primary: #27272a;
-  --color-primary-content: #fafafa;
-  --color-secondary: #52525b;
-  --color-secondary-content: #fafafa;
-  --color-accent: #6f5289;
-  --color-accent-content: #ece6f1;
-  --color-neutral: #27272a;
-  --color-neutral-content: #fafafa;
+  --color-base-100: #ffffff;
+  --color-base-200: #f1f6f6;
+  --color-base-300: #d7e3e8;
+  --color-base-content: #122c46;
+  --color-primary: #2c7ba0;
+  --color-primary-content: #ffffff;
+  --color-secondary: #455c70;
+  --color-secondary-content: #ffffff;
+  --color-accent: #2c7ba0;
+  --color-accent-content: #ffffff;
+  --color-neutral: #122c46;
+  --color-neutral-content: #eaf1f6;
   --color-info: #2563eb;
   --color-info-content: #ffffff;
   --color-success: #16a34a;
@@ -125,9 +151,9 @@
   --color-warning-content: #ffffff;
   --color-error: #dc2626;
   --color-error-content: #ffffff;
-  --radius-selector: 0.25rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -135,35 +161,35 @@
   --noise: 0;
 }
 
-/* daisyUI theme — ink (dark) */
+/* daisyUI theme — Tidewater dark (controls on a surface, app on the abyss) */
 @plugin "../vendor/daisyui-theme" {
   name: "dark";
   default: false;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: #0f172a;
-  --color-base-200: #020617;
-  --color-base-300: #1e293b;
-  --color-base-content: #f8fafc;
-  --color-primary: #f8fafc;
-  --color-primary-content: #020617;
-  --color-secondary: #cbd5e1;
-  --color-secondary-content: #020617;
-  --color-accent: #6f5289;
-  --color-accent-content: #ece6f1;
-  --color-neutral: #e2e8f0;
-  --color-neutral-content: #020617;
-  --color-info: #60a5fa;
-  --color-info-content: #020617;
-  --color-success: #4ade80;
-  --color-success-content: #022c14;
-  --color-warning: #fb923c;
+  --color-base-100: #0f2434;
+  --color-base-200: #143049;
+  --color-base-300: #1d3e57;
+  --color-base-content: #eaf1f6;
+  --color-primary: #4fa6ce;
+  --color-primary-content: #06141d;
+  --color-secondary: #a7bacb;
+  --color-secondary-content: #06141d;
+  --color-accent: #4fa6ce;
+  --color-accent-content: #06141d;
+  --color-neutral: #eaf1f6;
+  --color-neutral-content: #122c46;
+  --color-info: #3b82f6;
+  --color-info-content: #06141d;
+  --color-success: #22c55e;
+  --color-success-content: #04210f;
+  --color-warning: #f97316;
   --color-warning-content: #2b1500;
-  --color-error: #f87171;
+  --color-error: #ef4444;
   --color-error-content: #2a0a0a;
-  --radius-selector: 0.25rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
@@ -179,33 +205,129 @@
 /* Dark mode via data attribute */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
-/* Hairline border color, per theme */
-:root,
-[data-theme="light"] {
-  --line: #e4e4e7;
+/* Raised surface — tonal card with the inset/soft ring (no hard 1px border) */
+@utility card-surface {
+  background-color: var(--panel);
+  box-shadow: var(--card-ring);
 }
-[data-theme="dark"] {
-  --line: #1e293b;
+
+/* Sunken surface — insets, fieldsets, wells */
+@utility well-surface {
+  background-color: var(--well);
+}
+
+/* Code / logs / console — Tokyo Night Storm, in both app modes */
+@utility code-surface {
+  background-color: #24283b;
+  color: #c0caf5;
+}
+
+@keyframes tide {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes ping-dot {
+  0% {
+    box-shadow: 0 0 7px 0 color-mix(in srgb, currentColor 70%, transparent),
+      0 0 0 0 color-mix(in srgb, currentColor 50%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 7px 0 color-mix(in srgb, currentColor 70%, transparent),
+      0 0 0 6px transparent;
+  }
 }
 
 html,
 body {
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
 }
 
-.mono {
-  font-family: var(--font-mono);
-  font-feature-settings: "ss02", "cv01";
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.01em;
 }
 
+.font-display {
+  letter-spacing: -0.02em;
+}
+
+.mono,
 .font-mono {
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .hairline {
   border-color: var(--line);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-tide) 38%, transparent);
+}
+
+/* Tide focus ring — keyboard-visible only */
+:where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Primary button — the confident Tidewater gradient (soft variant stays subtle) */
+.btn-primary:not(.btn-soft) {
+  background-color: transparent;
+  background-image: linear-gradient(180deg, #2d7ea4, #1b5876);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 10px 30px -12px rgba(27, 88, 118, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.btn-primary:not(.btn-soft):hover {
+  filter: brightness(1.06);
+  box-shadow: 0 14px 34px -12px rgba(27, 88, 118, 0.62),
+    0 0 18px -8px rgba(121, 198, 232, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+/* Tailwind v4 drops the default button cursor */
+.btn,
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Status dot — a soft colored glow; the live tones gain the radar ping */
+.status-dot {
+  box-shadow: 0 0 7px 0 color-mix(in srgb, currentColor 70%, transparent);
+}
+.status-dot-ping {
+  animation: ping-dot 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Themed scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fg3) 45%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--fg3) 40%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--fg3) 65%, transparent);
 }
 
 /* Animated progress bar for in-flight deploy banners */

@@ -16,13 +16,7 @@ defmodule StillWeb.SettingsLive do
   alias Still.Fleet
   alias StillWeb.APIVersion
 
-  @audit_presets [
-    {:all, "all"},
-    {:applications, "applications"},
-    {:servers, "servers"},
-    {:users, "users"},
-    {:auth, "auth"}
-  ]
+  @audit_preview_limit 10
 
   @doc "Mounts the settings page, loading the instance summary and (for admins) the audit log."
   @impl true
@@ -31,8 +25,6 @@ defmodule StillWeb.SettingsLive do
      socket
      |> assign(:page_title, "Settings")
      |> assign(:can_admin, Scope.can?(socket.assigns.current_scope, :admin))
-     |> assign(:audit_presets, @audit_presets)
-     |> assign(:audit_preset, :all)
      |> assign(:expanded, MapSet.new())
      |> load_instance()
      |> load_audit()}
@@ -92,23 +84,13 @@ defmodule StillWeb.SettingsLive do
       <.panel :if={@can_admin} class="mb-6">
         <:title>Audit log</:title>
         <:subtitle>
-          Durable record of who did what. Newest first. Per-resource history lives on the
-          application and server detail pages.
+          The latest changes on this controller. Per-resource history lives on the application and
+          server detail pages.
         </:subtitle>
-        <div class="space-y-3">
-          <div class="flex flex-wrap items-center gap-1">
-            <button
-              :for={{value, label} <- @audit_presets}
-              type="button"
-              phx-click="set_audit_preset"
-              phx-value-preset={value}
-              class={["btn btn-xs", if(@audit_preset == value, do: "btn-neutral", else: "btn-ghost")]}
-            >
-              {label}
-            </button>
-          </div>
-          <.audit_log events={@audit_events} expanded={@expanded} />
-        </div>
+        <:actions>
+          <.arrow_link navigate={~p"/settings/audit"}>Full audit log</.arrow_link>
+        </:actions>
+        <.audit_log events={@audit_events} expanded={@expanded} empty="No audit events yet." />
       </.panel>
 
       <section class="hairline rounded-lg border border-rust-300 dark:border-rust-700/60">
@@ -143,12 +125,8 @@ defmodule StillWeb.SettingsLive do
     """
   end
 
-  @doc "Switches the audit preset filter and toggles per-row detail."
+  @doc "Toggles per-row audit detail."
   @impl true
-  def handle_event("set_audit_preset", %{"preset" => preset}, socket) do
-    {:noreply, socket |> assign(:audit_preset, parse_preset(preset)) |> load_audit()}
-  end
-
   def handle_event("toggle_audit", %{"id" => id}, socket) do
     {:noreply, update(socket, :expanded, &toggle_member(&1, id))}
   end
@@ -162,7 +140,7 @@ defmodule StillWeb.SettingsLive do
     |> assign(:api_version, APIVersion.current())
     |> assign(:server_count, length(servers))
     |> assign(:connected_count, length(connected))
-    |> assign(:mode, if(length(servers) <= 1, do: "standalone", else: "multi-node"))
+    |> assign(:mode, if(length(servers) <= 1, do: "Standalone", else: "Multi-node"))
     |> assign(:agent_version, fleet_agent_version(connected))
   end
 
@@ -180,24 +158,10 @@ defmodule StillWeb.SettingsLive do
 
   defp load_audit(socket) do
     events =
-      if socket.assigns.can_admin,
-        do: Audit.list(audit_filters(socket.assigns.audit_preset)),
-        else: []
+      if socket.assigns.can_admin, do: Audit.list(%{limit: @audit_preview_limit}), else: []
 
     assign(socket, :audit_events, events)
   end
-
-  defp audit_filters(:applications), do: %{subject_type: "application", limit: 100}
-  defp audit_filters(:servers), do: %{subject_type: "server", limit: 100}
-  defp audit_filters(:users), do: %{subject_type: "user", limit: 100}
-  defp audit_filters(:auth), do: %{type: "login_succeeded", limit: 100}
-  defp audit_filters(:all), do: %{limit: 100}
-
-  defp parse_preset("applications"), do: :applications
-  defp parse_preset("servers"), do: :servers
-  defp parse_preset("users"), do: :users
-  defp parse_preset("auth"), do: :auth
-  defp parse_preset(_all), do: :all
 
   defp toggle_member(set, id) do
     if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
