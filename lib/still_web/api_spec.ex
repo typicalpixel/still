@@ -27,7 +27,8 @@ defmodule StillWeb.ApiSpec do
         `{"error": {"message": string, "detail": any}}` on failure. Every
         response echoes the `Still-API-Version` header; clients pin a
         version by sending the same header on requests.
-        """
+        """,
+        extensions: %{"x-still-version" => to_string(Application.spec(:still, :vsn))}
       },
       servers: [Server.from_endpoint(Endpoint)],
       paths: Paths.from_router(Router),
