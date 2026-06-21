@@ -235,6 +235,23 @@ defmodule Still.Agent.DeploymentManagerTest do
     end
   end
 
+  describe "unit_failed?/1" do
+    test "treats a unit systemd has given up on (failed) as dead" do
+      assert DeploymentManager.unit_failed?("failed")
+    end
+
+    test "does not treat healthy, transient, or unknown states as dead" do
+      # "activating" is the auto-restart wait between RestartSec pauses — a
+      # crash-looping boot is repeatedly here, so it must NOT abort the deploy.
+      refute DeploymentManager.unit_failed?("active")
+      refute DeploymentManager.unit_failed?("activating")
+      refute DeploymentManager.unit_failed?("deactivating")
+      refute DeploymentManager.unit_failed?("inactive")
+      # nil = systemd unreachable; fall through to the normal HTTP timeout.
+      refute DeploymentManager.unit_failed?(nil)
+    end
+  end
+
   describe "slot_env_vars/1" do
     test "exposes the slot so a release can build a per-slot RELEASE_NODE; blue and green differ" do
       blue = slot_env_map(%{application: "forge"}, :blue)
@@ -339,6 +356,50 @@ defmodule Still.Agent.DeploymentManagerTest do
                DeploymentManager.handle_call({:deploy, spec}, self(), state)
 
       assert app == spec.application
+    end
+
+    test "stops the crash-looping target slot when a deploy fails its health check" do
+      test_pid = self()
+
+      stub_provider = fn _type ->
+        [
+          {:starting, fn ctx -> {:ok, ctx} end},
+          {:health_checking, fn _ctx -> {:error, :app_crash_looped} end}
+        ]
+      end
+
+      stop_target = fn application, slot ->
+        send(test_pid, {:stopped, application, slot})
+        :ok
+      end
+
+      state = %{step_provider: stub_provider, stop_target: stop_target}
+
+      assert {:reply, {:error, %{step: :health_checking, reason: :app_crash_looped}}, ^state} =
+               DeploymentManager.handle_call({:deploy, valid_spec()}, self(), state)
+
+      # First deploy of "my-api" targets the blue slot.
+      assert_received {:stopped, "my-api", :blue}
+    end
+
+    test "does not stop the target slot when a deploy fails before the health check" do
+      test_pid = self()
+
+      stub_provider = fn _type ->
+        [{:unpacking, fn _ctx -> {:error, "tar: file not found"} end}]
+      end
+
+      stop_target = fn application, slot ->
+        send(test_pid, {:stopped, application, slot})
+        :ok
+      end
+
+      state = %{step_provider: stub_provider, stop_target: stop_target}
+
+      assert {:reply, {:error, %{step: :unpacking}}, ^state} =
+               DeploymentManager.handle_call({:deploy, valid_spec()}, self(), state)
+
+      refute_received {:stopped, _application, _slot}
     end
   end
 
