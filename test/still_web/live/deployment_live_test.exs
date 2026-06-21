@@ -61,7 +61,10 @@ defmodule StillWeb.DeploymentLiveTest do
       assert html =~ "pending"
     end
 
-    test "renders a finished deployment with its duration and log", %{conn: conn, api: api} do
+    test "renders a finished deployment and gates its log behind deploy permission", %{
+      conn: conn,
+      api: api
+    } do
       deploy =
         api
         |> deployment_fixture()
@@ -73,7 +76,29 @@ defmodule StillWeb.DeploymentLiveTest do
       assert html =~ "succeeded"
       assert html =~ "took"
       assert html =~ "Log"
-      assert html =~ "last activity"
+      # The default fixture user is a viewer — the log panel is withheld.
+      assert html =~ "requires deploy permission"
+    end
+
+    test "withholds the actual log bytes from a viewer even when a log exists", %{
+      conn: conn,
+      api: api,
+      s1: s1
+    } do
+      deploy =
+        api
+        |> deployment_fixture()
+        |> Deployments.start_deployment!()
+        |> Deployments.fail_deployment!("x")
+
+      {:ok, _} =
+        Deployments.put_step_log(deploy.id, s1.id, "DATABASE_URL=postgres://app:s3cr3t@db/app")
+
+      {:ok, _lv, html} = live(conn, ~p"/deployments/#{deploy.id}")
+
+      assert html =~ "requires deploy permission"
+      # The secret in the captured boot log must never reach a :read-only user.
+      refute html =~ "s3cr3t"
     end
 
     test "reloads as its own steps transition and ignores sibling deploys", %{
@@ -104,6 +129,106 @@ defmodule StillWeb.DeploymentLiveTest do
       assert html =~ "Deployment not found"
     end
   end
+
+  describe "deployment detail — with deploy permission" do
+    setup %{conn: conn} do
+      admin = Still.AccountsFixtures.user_fixture(%{role: :admin})
+      api = application_fixture(%{name: "store"})
+      s1 = server_fixture(%{name: "host-1"})
+      {:ok, _} = Applications.assign_server(Actor.system(), api, s1)
+      %{conn: log_in_user(conn, admin), api: api, s1: s1}
+    end
+
+    test "renders the stored deploy log and a failure-signature hint", %{
+      conn: conn,
+      api: api,
+      s1: s1
+    } do
+      deploy =
+        api
+        |> deployment_fixture()
+        |> Deployments.start_deployment!()
+        |> Deployments.fail_deployment!("boot failed")
+
+      {:ok, _} =
+        Deployments.put_step_log(
+          deploy.id,
+          s1.id,
+          "booting release\nname store@host seems to be in use by another Erlang node"
+        )
+
+      {:ok, _lv, html} = live(conn, ~p"/deployments/#{deploy.id}")
+
+      refute html =~ "requires deploy permission"
+      assert html =~ "seems to be in use"
+      assert html =~ "Node-name collision"
+    end
+
+    test "shows no hint for a successful deploy even if the log would match", %{
+      conn: conn,
+      api: api,
+      s1: s1
+    } do
+      deploy =
+        api
+        |> deployment_fixture()
+        |> Deployments.start_deployment!()
+        |> Deployments.complete_deployment!()
+
+      {:ok, _} = Deployments.put_step_log(deploy.id, s1.id, "seems to be in use by another")
+
+      {:ok, _lv, html} = live(conn, ~p"/deployments/#{deploy.id}")
+
+      assert html =~ "seems to be in use"
+      refute html =~ "Node-name collision"
+    end
+
+    test "re-reads the log when an agent reports new journal", %{conn: conn, api: api, s1: s1} do
+      deploy =
+        api |> deployment_fixture() |> Deployments.start_deployment!() |> fail("x")
+
+      {:ok, _} = Deployments.put_step_log(deploy.id, s1.id, "first capture")
+      {:ok, lv, html} = live(conn, ~p"/deployments/#{deploy.id}")
+      assert html =~ "first capture"
+
+      {:ok, _} = Deployments.put_step_log(deploy.id, s1.id, "second capture surfaced")
+
+      Phoenix.PubSub.broadcast(
+        Still.PubSub,
+        "deploy_logs:#{deploy.id}",
+        {:deploy_log_updated, %{deployment_id: deploy.id}}
+      )
+
+      assert render(lv) =~ "second capture surfaced"
+    end
+
+    test "shows the no-log note when nothing was captured", %{conn: conn, api: api} do
+      deploy = api |> deployment_fixture() |> Deployments.start_deployment!() |> fail("x")
+
+      {:ok, _lv, html} = live(conn, ~p"/deployments/#{deploy.id}")
+      assert html =~ "No deploy log was captured."
+    end
+
+    test "groups captured logs per host across a multi-server deploy", %{conn: conn} do
+      multi = application_fixture(%{name: "multi"})
+      alpha = server_fixture(%{name: "alpha"})
+      bravo = server_fixture(%{name: "bravo"})
+      {:ok, _} = Applications.assign_server(Actor.system(), multi, alpha)
+      {:ok, _} = Applications.assign_server(Actor.system(), multi, bravo)
+
+      deploy = multi |> deployment_fixture() |> Deployments.start_deployment!() |> fail("x")
+      {:ok, _} = Deployments.put_step_log(deploy.id, alpha.id, "alpha booting")
+      {:ok, _} = Deployments.put_step_log(deploy.id, bravo.id, "bravo booting")
+
+      {:ok, _lv, html} = live(conn, ~p"/deployments/#{deploy.id}")
+
+      assert html =~ "── alpha ──"
+      assert html =~ "alpha booting"
+      assert html =~ "bravo booting"
+    end
+  end
+
+  defp fail(deployment, reason), do: Deployments.fail_deployment!(deployment, reason)
 
   describe "unauthenticated" do
     test "redirects to the login page", %{conn: conn} do

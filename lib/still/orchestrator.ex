@@ -27,6 +27,7 @@ defmodule Still.Orchestrator do
   alias Still.Audit
   alias Still.Audit.Actor
   alias Still.Deployments
+  alias Still.Deployments.FailureReason
   alias Still.Protocol.DeployRequest
 
   # Fire-and-forget deploy/route tasks run under this supervisor (started in
@@ -397,8 +398,7 @@ defmodule Still.Orchestrator do
     end
   end
 
-  defp format_reason(reason) when is_binary(reason), do: reason
-  defp format_reason(reason), do: inspect(reason)
+  defp format_reason(reason), do: FailureReason.headline(reason)
 
   defp deploy_to_server(deployment, application, application_server, agent_caller) do
     step = Deployments.get_step_for_server!(deployment.id, application_server.server_id)
@@ -480,6 +480,7 @@ defmodule Still.Orchestrator do
       type: application.type,
       version: deployment.version,
       artifact_url: ArtifactStore.artifact_url(application.name, deployment.version),
+      deployment_id: deployment.id,
       domain: application.domain,
       path_prefix: application.path_prefix,
       env_vars: application.env_vars,

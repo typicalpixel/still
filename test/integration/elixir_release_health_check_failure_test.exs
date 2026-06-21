@@ -2,10 +2,14 @@ defmodule Still.Integration.ElixirReleaseHealthCheckFailureTest do
   use Still.IntegrationCase, root: true
 
   alias Still.Agent.CaddyManager
+  alias Still.Agent.DeployLogCollector
   alias Still.Agent.DeploymentManager
   alias Still.IntegrationFixtures
 
   @application "test-still-health-fail"
+  @server_id "test-server-deploylog"
+  @deployment_id "test-deploy-log-id"
+  @boot_sentinel "STILL_BOOT_SENTINEL_4f9c2a"
 
   setup do
     cleanup_systemd_units(@application)
@@ -29,17 +33,28 @@ defmodule Still.Integration.ElixirReleaseHealthCheckFailureTest do
 
   test "fails fast with :app_crash_looped when the unit crash-loops on boot, instead of timing out",
        %{ports: ports} do
-    # /bin/false exits non-zero on every start, so the unit crash-loops and
-    # trips StartLimitBurst → ActiveState latches to "failed". A generous health
-    # deadline (30s) would mask the crash as a slow boot under the old polling;
-    # the fix consults the unit and bails the moment it goes failed.
+    # Echo a unique sentinel to stderr, then exit non-zero on every start: the
+    # unit crash-loops and trips StartLimitBurst → ActiveState latches to
+    # "failed". The sentinel is real APP output (not systemd's envelope), so
+    # asserting it lands proves the capture pipeline survives strip_meta/cap_tail/
+    # capture-then-stop end-to-end. A generous 30s deadline would mask the crash
+    # as a slow boot under the old polling; the fix bails the moment it goes failed.
     spec =
       build_spec(ports)
       |> Map.merge(%{
         version: "0.0.1-crash",
-        exec_command: "/bin/false",
+        deployment_id: @deployment_id,
+        exec_command: "/bin/sh -c 'echo #{@boot_sentinel} 1>&2; exit 1'",
         health_check: %{path: "/health", interval_ms: 250, deadline_ms: 30_000}
       })
+
+    # Drive deploy-log capture end-to-end: the agent collector casts the captured
+    # journal to whatever is registered as Still.DeployLogCollector on the
+    # controller node — here, the test process.
+    Application.put_env(:still, :server_id, @server_id)
+    on_exit(fn -> Application.delete_env(:still, :server_id) end)
+    Process.register(self(), Still.DeployLogCollector)
+    start_supervised!({DeployLogCollector, controller_node: node(), interval_ms: 1_000})
 
     start_supervised!(DeploymentManager)
 
@@ -58,6 +73,13 @@ defmodule Still.Integration.ElixirReleaseHealthCheckFailureTest do
     # The 2s restart backoff is what keeps the crash-loop legible (§2.1).
     unit_file = File.read!("/etc/systemd/system/#{@application}@.service")
     assert unit_file =~ "RestartSec=2s"
+
+    # The collector captured the crash-looping unit's journal and cast the final
+    # blob (capture-then-stop). The unit's own sentinel output proves real app
+    # crash text survived the pipeline — not just systemd's envelope lines.
+    assert_receive {:"$gen_cast", {:capture, @deployment_id, @server_id, log, true}}, 2_000
+    assert log =~ @boot_sentinel
+    assert log =~ @application
   end
 
   defp build_spec(ports) do

@@ -219,14 +219,18 @@ defmodule StillWeb.DeploymentComponents do
   end
 
   @doc """
-  The deploy log section. `log` is the captured deploy-log text for the
-  deployment (per `PLAN_deployment_logs.md`: the journal captured over the
-  deploy window). `nil`/empty shows the streaming-soon note. Lines are
-  colorized from their leading marker at render time — the data stays plain
-  text.
+  The deploy log section. `log` is the captured journal for the deploy window
+  (per `PLAN_deployment_logs.md`). `hint` is an optional `%{title:, body:}`
+  failure-signature hint rendered above the log. `can_view` gates the panel —
+  boot logs can carry secrets, so a viewer without deploy permission sees a
+  notice instead. Repeated lines are collapsed and lines colorized at render
+  time; the stored data stays plain text.
   """
   attr :deployment, :map, required: true
   attr :log, :string, default: nil
+  attr :hint, :map, default: nil
+  attr :can_view, :boolean, default: true
+  attr :app_type, :atom, default: nil
 
   def deployment_log(assigns) do
     assigns = assign(assigns, :log_lines, log_lines(assigns.log))
@@ -235,41 +239,63 @@ defmodule StillWeb.DeploymentComponents do
     <h2 class="mb-2 text-[13px] font-medium text-paper-800 dark:text-ink-50">
       {if in_flight?(@deployment), do: "Live log", else: "Log"}
     </h2>
-    <div class="code-surface overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)] ring-1 ring-white/[0.06]">
-      <pre class="max-h-80 min-h-40 overflow-auto px-4 py-3.5 font-mono text-xs leading-relaxed"><span
-          :for={line <- @log_lines}
-          class="block"
-          style={"color:#{log_tone(line)}"}
-        >{line}</span><span :if={in_flight?(@deployment)} class="animate-pulse" style="color:#7aa2f7">▌</span></pre>
-    </div>
-    <div
-      :if={(last_seen(@deployment) && not in_flight?(@deployment)) or @log_lines == []}
-      class="mt-2 flex items-center justify-between gap-4 text-[12px]"
+    <p
+      :if={not @can_view}
+      class="text-[13px] text-paper-500 dark:text-ink-300"
     >
-      <span
-        :if={last_seen(@deployment) && not in_flight?(@deployment)}
-        class="text-paper-500 dark:text-ink-300"
+      Deploy logs can contain secret values from the application's boot — viewing requires deploy permission.
+    </p>
+    <div :if={@can_view}>
+      <div
+        :if={@hint}
+        class="mb-3 rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-[13px] dark:border-amber-400/30 dark:bg-amber-400/10"
       >
-        last activity {relative_time(last_seen(@deployment))}
-      </span>
-      <span
-        :if={@log_lines == []}
-        class="ml-auto font-mono text-[11px] text-paper-400 italic dark:text-ink-500"
+        <div class="font-medium text-amber-800 dark:text-amber-200">{@hint.title}</div>
+        <div class="mt-0.5 text-amber-700 dark:text-amber-100/80">{@hint.body}</div>
+      </div>
+      <div class="code-surface overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)] ring-1 ring-white/[0.06]">
+        <pre class="max-h-80 min-h-40 overflow-auto px-4 py-3.5 font-mono text-xs leading-relaxed"><span
+            :for={line <- @log_lines}
+            class="block"
+            style={"color:#{log_tone(line)}"}
+          >{line}</span><span :if={in_flight?(@deployment)} class="animate-pulse" style="color:#7aa2f7">▌</span></pre>
+      </div>
+      <p
+        :if={@log_lines == [] and not in_flight?(@deployment)}
+        class="mt-2 font-mono text-[11px] text-paper-400 italic dark:text-ink-500"
       >
-        streaming arrives in v0.2.0
-      </span>
+        {empty_log_note(@app_type)}
+      </p>
     </div>
     """
   end
 
+  # Static sites serve files directly — there's no unit/journal to capture, so
+  # don't imply capture failed.
+  defp empty_log_note(:static_site),
+    do: "Static-site deploys serve files directly and have no boot journal."
+
+  defp empty_log_note(_type), do: "No deploy log was captured."
+
   defp log_lines(nil), do: []
   defp log_lines(""), do: []
-  defp log_lines(text), do: String.split(text, "\n")
 
-  # Tokyo Night tones derived from the line's leading marker (presentation only).
+  defp log_lines(text) do
+    text |> Still.DeployLog.collapse_repeats() |> String.split("\n")
+  end
+
+  # Tokyo Night tones derived from line content (presentation only).
   defp log_tone("✓" <> _), do: "#9ece6a"
-  defp log_tone("  " <> _), do: "#6b7394"
-  defp log_tone(_line), do: "#c0caf5"
+  defp log_tone("  … " <> _), do: "#6b7394"
+  defp log_tone("── " <> _), do: "#7aa2f7"
+
+  defp log_tone(line) do
+    cond do
+      line =~ ~r/\b(error|fatal|failed|failure|crash)\b/i -> "#f7768e"
+      line =~ ~r/\b(started|listening|ready|success|succeeded)\b/i -> "#9ece6a"
+      true -> "#c0caf5"
+    end
+  end
 
   @doc "The start-deploy dialog for the deployments index — pick an application, then version/artifact."
   attr :show, :boolean, required: true
@@ -313,6 +339,4 @@ defmodule StillWeb.DeploymentComponents do
 
   defp finished?(%{started_at: %DateTime{}, completed_at: %DateTime{}}), do: true
   defp finished?(_deployment), do: false
-
-  defp last_seen(%{completed_at: completed, started_at: started}), do: completed || started
 end

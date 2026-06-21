@@ -229,7 +229,7 @@ defmodule Still.OrchestratorTest do
 
       assert server1_step.status == :completed
       assert server2_step.status == :failed
-      assert server2_step.error == ":agent_disconnected"
+      assert server2_step.error == "The agent for this server disconnected mid-deploy."
     end
   end
 

@@ -19,6 +19,7 @@ defmodule Still.Protocol.DeployRequest do
     :type,
     :version,
     :artifact_url,
+    :deployment_id,
     :domain,
     :path_prefix,
     :env_vars,
