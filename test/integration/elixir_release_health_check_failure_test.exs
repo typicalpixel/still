@@ -44,6 +44,7 @@ defmodule Still.Integration.ElixirReleaseHealthCheckFailureTest do
     start_supervised!(DeploymentManager)
 
     started_at = System.monotonic_time(:millisecond)
+
     assert {:error, %{step: :health_checking, reason: :app_crash_looped}} =
              DeploymentManager.deploy(spec)
 
