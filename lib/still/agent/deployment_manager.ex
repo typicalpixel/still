@@ -38,6 +38,7 @@ defmodule Still.Agent.DeploymentManager do
   alias Still.Agent.HealthMonitor
   alias Still.Agent.NodeConnector
   alias Still.Agent.StatePersistence
+  alias Still.Agent.Systemd
   alias Still.Caddy.Config, as: CaddyConfig
   alias Still.CaddyBootstrap
 
@@ -111,8 +112,11 @@ defmodule Still.Agent.DeploymentManager do
     case build_context(spec) do
       {:ok, context} ->
         case run_steps(steps, context) do
-          {:ok, ctx} -> {:reply, {:ok, ctx.spec.version}, state}
-          {:error, _} = error -> {:reply, error, state}
+          {:ok, ctx} ->
+            {:reply, {:ok, ctx.spec.version}, state}
+
+          {:error, _} = error ->
+            {:reply, stop_target_on_health_failure(error, context, state), state}
         end
 
       {:error, _} = error ->
@@ -126,8 +130,11 @@ defmodule Still.Agent.DeploymentManager do
         steps = state.rollback_step_provider.(spec.type)
 
         case run_steps(steps, context) do
-          {:ok, ctx} -> {:reply, {:ok, ctx.spec.version}, state}
-          {:error, _} = error -> {:reply, error, state}
+          {:ok, ctx} ->
+            {:reply, {:ok, ctx.spec.version}, state}
+
+          {:error, _} = error ->
+            {:reply, stop_target_on_health_failure(error, context, state), state}
         end
 
       {:error, _} = error ->
@@ -159,6 +166,24 @@ defmodule Still.Agent.DeploymentManager do
         end
     end)
   end
+
+  # A deploy/rollback that fails its health check has just started the target
+  # slot, which is now crash-looping or refusing connections and will keep
+  # spamming the journal until the next deploy reclaims it — so stop it. Other
+  # failed steps either ran before the slot was started (nothing to stop) or
+  # after it went healthy (switch/cleanup — leave it for a retry), so only the
+  # health-check failure triggers the stop. The stop action is injectable so
+  # unit tests don't shell out to systemctl; production uses default_stop_target/2.
+  #
+  # The deployment-logs plan captures the unit's journal just *before* this stop
+  # so the crash reason survives — capture-then-stop. This is the stop half.
+  defp stop_target_on_health_failure({:error, %{step: :health_checking}} = error, ctx, state) do
+    stop_target = Map.get(state, :stop_target, &default_stop_target/2)
+    stop_target.(ctx.spec.application, ctx.target_slot)
+    error
+  end
+
+  defp stop_target_on_health_failure(error, _ctx, _state), do: error
 
   @doc """
   Returns the default step list for the given application type — the
@@ -537,6 +562,21 @@ defmodule Still.Agent.DeploymentManager do
     [CaddyConfig.reverse_proxy(dial: "localhost:#{ctx.target_port}")]
   end
 
+  @doc """
+  Whether a slot's systemd `ActiveState` means the unit has given up — the
+  signal `poll_health/4` uses to fail a deploy fast instead of polling to the
+  full HTTP deadline.
+
+  Only `"failed"` qualifies. A boot crash-loop trips the unit's
+  `StartLimitBurst` and latches `ActiveState` to `"failed"`, which is
+  permanent until the next deploy's `reset-failed`. The transient
+  `"activating"` the unit cycles through during each `RestartSec` pause must
+  NOT abort an otherwise-slow-but-healthy boot, and a `nil` state (systemd
+  unreachable) falls through to the normal timeout.
+  """
+  def unit_failed?("failed"), do: true
+  def unit_failed?(_active_state), do: false
+
   # six:ignore:start
 
   defp cleanup(ctx) when is_map(ctx) do
@@ -634,9 +674,24 @@ defmodule Still.Agent.DeploymentManager do
           {:ok, ctx}
 
         _ ->
-          Process.sleep(interval)
-          poll_health(url, interval, deadline, ctx)
+          fail_fast_or_retry(url, interval, deadline, ctx)
       end
+    end
+  end
+
+  # The probe failed. Before sleeping for another interval, ask systemd whether
+  # the unit has given up: a boot crash-loop trips StartLimitBurst and latches
+  # ActiveState to "failed", at which point the port will never come up. Fail
+  # fast with a truthful reason instead of grinding to the misleading
+  # full-deadline timeout.
+  defp fail_fast_or_retry(url, interval, deadline, ctx) do
+    %{active_state: active_state} = Systemd.info_for(ctx.spec.application, ctx.target_slot)
+
+    if unit_failed?(active_state) do
+      {:error, :app_crash_looped}
+    else
+      Process.sleep(interval)
+      poll_health(url, interval, deadline, ctx)
     end
   end
 
@@ -665,6 +720,20 @@ defmodule Still.Agent.DeploymentManager do
         end
 
         {:ok, ctx}
+    end
+  end
+
+  # Best-effort stop of a target slot whose deploy/rollback failed its health
+  # check (see stop_target_on_health_failure/3). The deploy already failed, so a
+  # failure to stop must not raise — log and move on; the next deploy reclaims it.
+  defp default_stop_target(application, slot) do
+    case systemctl(:stop, application, slot) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("stop_failed_target: #{application}@#{slot} did not stop: #{reason}")
+        :ok
     end
   end
 
@@ -750,7 +819,10 @@ defmodule Still.Agent.DeploymentManager do
         "ExecStart=#{resolve_exec_command(spec.exec_command, ctx)}",
         exec_stop && "ExecStop=#{resolve_exec_command(exec_stop, ctx)}",
         stop_timeout_ms && "TimeoutStopSec=#{div(stop_timeout_ms, 1000)}",
-        "Restart=always"
+        "Restart=always",
+        # 2s restart backoff — systemd's 100ms default lets a boot crash-loop
+        # hammer ~10x/sec and trip StartLimitBurst before the cause is readable.
+        "RestartSec=2s"
       ]
       |> Enum.reject(&is_nil/1)
 
