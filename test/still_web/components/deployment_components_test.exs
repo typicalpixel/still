@@ -269,54 +269,90 @@ defmodule StillWeb.DeploymentComponentsTest do
   end
 
   describe "deployment_log/1" do
-    test "toggles between live and finished states" do
-      assigns = %{
-        inflight: %{
-          status: :in_progress,
-          started_at: ~U[2026-01-01 00:00:00Z],
-          completed_at: nil
-        },
+    setup do
+      %{
+        inflight: %{status: :in_progress, started_at: ~U[2026-01-01 00:00:00Z], completed_at: nil},
         done: %{
           status: :completed,
           started_at: ~U[2026-01-01 00:00:00Z],
           completed_at: ~U[2026-01-01 00:00:30Z]
         }
       }
-
-      html = rendered_to_string(~H|<.deployment_log deployment={@inflight} />|)
-      assert html =~ "Live log"
-      assert html =~ "streaming arrives in v0.2.0"
-
-      html = rendered_to_string(~H|<.deployment_log deployment={@done} />|)
-      assert html =~ "Log"
-      assert html =~ "last activity"
     end
 
-    test "renders captured log lines, colorized by leading marker" do
+    test "toggles heading between live and finished states", %{inflight: inflight, done: done} do
+      assigns = %{inflight: inflight, done: done}
+
+      assert rendered_to_string(~H|<.deployment_log deployment={@inflight} />|) =~ "Live log"
+
+      # A finished deploy with an empty capture shows the no-log note.
+      html = rendered_to_string(~H|<.deployment_log deployment={@done} log="" />|)
+      assert html =~ "Log"
+      assert html =~ "No deploy log was captured."
+    end
+
+    test "static-site deploys get a no-journal note, not a capture-loss note", %{done: done} do
+      assigns = %{done: done}
+
+      html =
+        rendered_to_string(
+          ~H|<.deployment_log deployment={@done} log="" app_type={:static_site} />|
+        )
+
+      assert html =~ "have no boot journal"
+      refute html =~ "No deploy log was captured."
+    end
+
+    test "renders captured log lines, colorized by content", %{inflight: deployment} do
       assigns = %{
-        deployment: %{
-          status: :in_progress,
-          started_at: ~U[2026-01-01 00:00:00Z],
-          completed_at: nil
-        },
-        log: "→ starting app\n  app listening on :4000\n✓ healthy — switching traffic"
+        deployment: deployment,
+        log: "── web-1 ──\nbooting release\napp listening on :4000\nFATAL: boom\n✓ deployed"
       }
 
       html = rendered_to_string(~H|<.deployment_log deployment={@deployment} log={@log} />|)
 
-      assert html =~ "starting app"
+      assert html =~ "booting release"
       assert html =~ "app listening on :4000"
-      assert html =~ "switching traffic"
-      # ✓ line → green, indented output → dim, default line → foam
+      # host separator → blue, "listening"/"✓" → green, "FATAL" → red, plain → foam
+      assert html =~ "#7aa2f7"
       assert html =~ "#9ece6a"
-      assert html =~ "#6b7394"
+      assert html =~ "#f7768e"
       assert html =~ "#c0caf5"
-      # captured log replaces the streaming-soon placeholder
-      refute html =~ "streaming arrives in v0.2.0"
+    end
 
-      # an empty captured log falls back to the placeholder
-      empty = rendered_to_string(~H|<.deployment_log deployment={@deployment} log="" />|)
-      assert empty =~ "streaming arrives in v0.2.0"
+    test "collapses repeated lines", %{inflight: deployment} do
+      assigns = %{deployment: deployment, log: "crash\ncrash\ncrash"}
+
+      html = rendered_to_string(~H|<.deployment_log deployment={@deployment} log={@log} />|)
+      assert html =~ "… ×3"
+    end
+
+    test "renders a failure-signature hint above the log", %{done: deployment} do
+      assigns = %{
+        deployment: deployment,
+        log: "boom",
+        hint: %{title: "Node-name collision", body: "Derive a per-slot RELEASE_NODE."}
+      }
+
+      html =
+        rendered_to_string(
+          ~H|<.deployment_log deployment={@deployment} log={@log} hint={@hint} />|
+        )
+
+      assert html =~ "Node-name collision"
+      assert html =~ "Derive a per-slot RELEASE_NODE."
+    end
+
+    test "hides the log behind a notice without deploy permission", %{done: deployment} do
+      assigns = %{deployment: deployment, log: "postgres://user:secret@db/app"}
+
+      html =
+        rendered_to_string(
+          ~H|<.deployment_log deployment={@deployment} log={@log} can_view={false} />|
+        )
+
+      assert html =~ "requires deploy permission"
+      refute html =~ "secret@db"
     end
   end
 end

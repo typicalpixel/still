@@ -405,6 +405,35 @@ defmodule Still.Deployments do
   end
 
   @doc """
+  Persists the captured deploy log onto the step for `(deployment_id, server_id)`.
+  Called by `Still.DeployLogCollector` when the agent reports the final journal
+  blob for a step. Returns `{:ok, %DeploymentStep{}}`, or `:error` if no such
+  step exists (the deployment was deleted mid-flight).
+  """
+  def put_step_log(deployment_id, server_id, log)
+      when is_binary(deployment_id) and is_binary(server_id) and is_binary(log) do
+    case Repo.get_by(DeploymentStep, deployment_id: deployment_id, server_id: server_id) do
+      nil ->
+        :error
+
+      step ->
+        # A DB fault (e.g. SQLite lock) raises here; the only caller —
+        # Still.DeployLogCollector.persist/3 — rescues so a hiccup drops one log
+        # rather than crashing the collector and wiping every live buffer.
+        {:ok, step |> Ecto.Changeset.change(%{log: log}) |> Repo.update!()}
+    end
+  end
+
+  @doc """
+  Returns just the status atom for a deployment id, or `nil` when no deployment
+  has that id. Lightweight (no preloads) — used by the deploy-log collector to
+  sweep buffers whose deployment has gone terminal.
+  """
+  def deployment_status(id) when is_binary(id) do
+    Repo.one(from d in Deployment, where: d.id == ^id, select: d.status)
+  end
+
+  @doc """
   Returns the deployment the fleet would roll back to — the previous
   successful version. Returns `nil` when there is nothing to roll back to:
   fewer than two successful deployments, or the current live deployment is

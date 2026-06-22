@@ -82,6 +82,19 @@ defmodule Still.Events do
   end
 
   @doc """
+  Broadcasts a deploy-log update on `deploy_logs:<deployment_id>`. Fired by
+  `Still.DeployLogCollector` each time an agent reports captured journal for a
+  step (and once more when the step's log is finalized). The deployment detail
+  LiveView subscribes to re-read the live buffer.
+  """
+  def deploy_log_updated(deployment_id) when is_binary(deployment_id) do
+    broadcast(
+      "deploy_logs:#{deployment_id}",
+      {:deploy_log_updated, %{deployment_id: deployment_id}}
+    )
+  end
+
+  @doc """
   Broadcasts a per-application Caddy-metrics sample on
   `app_metrics:<application_name>`. Fired by `Still.CaddyMetricsScraper`
   after each scrape tick.

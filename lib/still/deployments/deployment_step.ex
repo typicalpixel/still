@@ -26,6 +26,7 @@ defmodule Still.Deployments.DeploymentStep do
   schema "deployment_steps" do
     field :status, Ecto.Enum, values: @statuses, default: :pending
     field :error, :string
+    field :log, :string
     field :started_at, :utc_datetime_usec
     field :completed_at, :utc_datetime_usec
 

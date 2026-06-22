@@ -1,5 +1,25 @@
+# A stand-in deploy-log collector that dies on finish/0, to prove a faulty
+# collector (slow journal -> call timeout, or a crash) cannot break a deploy.
+defmodule Still.Agent.DeploymentManagerTest.CrashOnFinish do
+  @moduledoc false
+  use GenServer
+
+  def start_link(_opts),
+    do: GenServer.start_link(__MODULE__, :ok, name: Still.Agent.DeployLogCollector)
+
+  @impl true
+  def init(:ok), do: {:ok, :ok}
+
+  @impl true
+  def handle_call(:finish, _from, state), do: {:stop, :boom, state}
+end
+
 defmodule Still.Agent.DeploymentManagerTest do
   use ExUnit.Case, async: false
+
+  import ExUnit.CaptureLog
+
+  alias Still.Agent.DeploymentManagerTest.CrashOnFinish
 
   alias Still.Agent.ApplicationState
   alias Still.Agent.CaddyManager
@@ -75,6 +95,20 @@ defmodule Still.Agent.DeploymentManagerTest do
       ctx = %{spec: valid_spec()}
 
       assert {:error, %{step: :first, reason: "nope"}} = DeploymentManager.run_steps(steps, ctx)
+    end
+
+    test "rescues a raising step into a step failure instead of crashing" do
+      steps = [
+        {:ok_one, fn ctx -> {:ok, ctx} end},
+        {:exploding, fn _ctx -> raise "disk full" end}
+      ]
+
+      ctx = %{spec: valid_spec()}
+
+      assert {:error, %{step: :exploding, reason: reason}} =
+               DeploymentManager.run_steps(steps, ctx)
+
+      assert reason =~ "disk full"
     end
   end
 
@@ -310,6 +344,23 @@ defmodule Still.Agent.DeploymentManagerTest do
 
       assert {:reply, {:ok, "1.2.3+xyz"}, ^state} =
                DeploymentManager.handle_call({:deploy, spec}, self(), state)
+    end
+
+    test "a deploy-log collector that crashes on finish cannot break the deploy" do
+      start_supervised!(%{
+        id: CrashOnFinish,
+        start: {CrashOnFinish, :start_link, [[]]},
+        restart: :temporary
+      })
+
+      state = %{step_provider: fn _type -> [{:starting, fn ctx -> {:ok, ctx} end}] end}
+
+      # finish_log_capture/0 calls the (crashing) collector; its `catch :exit`
+      # must swallow the fault so the deploy still completes.
+      capture_log(fn ->
+        assert {:reply, {:ok, _version}, _state} =
+                 DeploymentManager.handle_call({:deploy, valid_spec()}, self(), state)
+      end)
     end
 
     test "returns the failed step's tag and reason when a step fails" do

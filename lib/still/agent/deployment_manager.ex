@@ -35,6 +35,7 @@ defmodule Still.Agent.DeploymentManager do
 
   alias Still.Agent.ApplicationState
   alias Still.Agent.CaddyManager
+  alias Still.Agent.DeployLogCollector
   alias Still.Agent.HealthMonitor
   alias Still.Agent.NodeConnector
   alias Still.Agent.StatePersistence
@@ -111,7 +112,11 @@ defmodule Still.Agent.DeploymentManager do
 
     case build_context(spec) do
       {:ok, context} ->
-        case run_steps(steps, context) do
+        result = run_steps(steps, context)
+        # Capture-then-stop: flush the journal before any failed slot is stopped.
+        finish_log_capture()
+
+        case result do
           {:ok, ctx} ->
             {:reply, {:ok, ctx.spec.version}, state}
 
@@ -128,8 +133,10 @@ defmodule Still.Agent.DeploymentManager do
     case build_rollback_context(spec) do
       {:ok, context} ->
         steps = state.rollback_step_provider.(spec.type)
+        result = run_steps(steps, context)
+        finish_log_capture()
 
-        case run_steps(steps, context) do
+        case result do
           {:ok, ctx} ->
             {:reply, {:ok, ctx.spec.version}, state}
 
@@ -160,9 +167,17 @@ defmodule Still.Agent.DeploymentManager do
         failed
 
       {name, step_fn}, {:ok, current_ctx} ->
-        case step_fn.(current_ctx) do
-          {:ok, new_ctx} -> {:ok, new_ctx}
-          {:error, reason} -> {:error, %{step: name, reason: reason}}
+        # Rescue a raising step body (e.g. File.mkdir_p!/rm_rf!) into a normal
+        # step failure so the deploy fails cleanly — and, crucially, so the
+        # handler still runs finish_log_capture/0 and the journal is preserved —
+        # instead of crashing the manager before the log is flushed.
+        try do
+          case step_fn.(current_ctx) do
+            {:ok, new_ctx} -> {:ok, new_ctx}
+            {:error, reason} -> {:error, %{step: name, reason: reason}}
+          end
+        rescue
+          exception -> {:error, %{step: name, reason: Exception.message(exception)}}
         end
     end)
   end
@@ -281,6 +296,7 @@ defmodule Still.Agent.DeploymentManager do
       {:ok,
        %{
          spec: spec,
+         deployment_id: Map.get(spec, :deployment_id),
          current_state: current_state,
          target_slot: target_slot,
          target_port: port_for_slot(spec, target_slot),
@@ -639,9 +655,39 @@ defmodule Still.Agent.DeploymentManager do
     with :ok <- write_slot_env_file(ctx),
          :ok <- write_systemd_unit(ctx),
          :ok <- systemd_daemon_reload(),
+         :ok <- begin_log_capture(ctx),
          :ok <- restart_slot(ctx.spec.application, ctx.target_slot) do
       {:ok, ctx}
     end
+  end
+
+  # Start the journal capture immediately before the slot restarts, so the
+  # boundary cursor precedes the new process's boot. Strictly best-effort: a
+  # no-op when the collector isn't running, and a `catch` so a slow journal read
+  # (call timeout) or a collector that died after the whereis check can never
+  # crash the deploy — log capture must never break a deploy.
+  defp begin_log_capture(ctx) do
+    if Process.whereis(DeployLogCollector) do
+      DeployLogCollector.begin(ctx.deployment_id, ctx.spec.application, ctx.target_slot)
+    end
+
+    :ok
+  catch
+    :exit, _reason -> :ok
+  end
+
+  # Flush and end the capture on any deploy terminal. No-op when the collector
+  # isn't running or wasn't capturing (static sites, deploys that failed before
+  # start). Same best-effort `catch` as begin — a finalize hiccup must not crash
+  # the deploy or swallow its reply.
+  defp finish_log_capture do
+    if Process.whereis(DeployLogCollector) do
+      DeployLogCollector.finish()
+    end
+
+    :ok
+  catch
+    :exit, _reason -> :ok
   end
 
   # Bring the target slot up with `restart`, not `start`. A redeploy can target

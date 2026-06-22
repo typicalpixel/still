@@ -448,6 +448,42 @@ defmodule Still.DeploymentsTest do
     end
   end
 
+  describe "put_step_log/3" do
+    setup do
+      app = application_fixture()
+      server = server_fixture()
+      Applications.assign_server(Actor.system(), app, server)
+      deployment = deployment_fixture(app)
+      %{deployment: deployment, server: server}
+    end
+
+    test "writes the log onto the matching step", %{deployment: deployment, server: server} do
+      assert {:ok, step} = Deployments.put_step_log(deployment.id, server.id, "boot log")
+      assert step.log == "boot log"
+      assert Deployments.get_deployment_step!(step.id).log == "boot log"
+    end
+
+    test "returns :error when no step matches", %{server: server} do
+      assert Deployments.put_step_log(Ecto.UUID.generate(), server.id, "x") == :error
+    end
+  end
+
+  describe "deployment_status/1" do
+    test "returns the status atom, or nil for an unknown id" do
+      app = application_fixture()
+      server = server_fixture()
+      Applications.assign_server(Actor.system(), app, server)
+      deployment = deployment_fixture(app)
+
+      assert Deployments.deployment_status(deployment.id) == :pending
+
+      Deployments.fail_deployment!(deployment, "x")
+      assert Deployments.deployment_status(deployment.id) == :failed
+
+      assert Deployments.deployment_status(Ecto.UUID.generate()) == nil
+    end
+  end
+
   describe "get_step_for_server!/2" do
     test "returns the step matching the deployment and server" do
       app = application_fixture()

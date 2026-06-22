@@ -52,6 +52,7 @@ defmodule Still.Application do
     [
       {Still.Agent.NodeConnector, controller_node: controller},
       {Still.Agent.NodeMetrics, controller_node: controller},
+      {Still.Agent.DeployLogCollector, controller_node: controller},
       {Still.Agent.DeploymentManager, []},
       {Still.Agent.HealthMonitor, reporter: &NodeConnector.report_health_transition/1}
     ]
@@ -98,6 +99,7 @@ defmodule Still.Application do
     [
       Still.AgentConnectionManager,
       Still.MetricsCollector,
+      Still.DeployLogCollector,
       Still.CaddyMetricsScraper,
       Still.EventLog,
       Still.Orchestrator,
@@ -120,6 +122,7 @@ defmodule Still.Application do
     [
       {Still.Agent.NodeConnector, controller_node: Node.self()},
       {Still.Agent.NodeMetrics, controller_node: Node.self()},
+      {Still.Agent.DeployLogCollector, controller_node: Node.self()},
       {Still.Agent.DeploymentManager, []},
       {Still.Agent.HealthMonitor, reporter: &NodeConnector.report_health_transition/1}
     ]
