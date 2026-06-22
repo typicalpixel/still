@@ -19,7 +19,7 @@ defmodule Still.IntegrationFixtures do
   @static_tag "v0.0.1"
 
   @release_repo "typicalpixel/elixir_release"
-  @release_tag "v0.0.1"
+  @release_tag "v0.0.2"
 
   # The upstream repos name their tarballs slightly differently: static
   # filenames drop the leading `v` from the version; release filenames keep
@@ -46,13 +46,13 @@ defmodule Still.IntegrationFixtures do
       repo: @release_repo,
       tag: @release_tag,
       filename: "elixir_release-vA-#{@release_filename_version}.tar.gz",
-      size: 27_036_928
+      size: 27_028_306
     },
     release_b: %{
       repo: @release_repo,
       tag: @release_tag,
       filename: "elixir_release-vB-#{@release_filename_version}.tar.gz",
-      size: 27_036_930
+      size: 27_027_612
     }
   }
 

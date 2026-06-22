@@ -930,6 +930,33 @@ defmodule StillWeb.ApplicationComponents do
     """
   end
 
+  @doc "The restart confirmation dialog."
+  attr :show, :boolean, required: true
+  attr :app_name, :string, required: true
+  attr :version, :string, required: true
+  attr :error, :string, default: nil
+
+  def restart_dialog(assigns) do
+    ~H"""
+    <.modal id="restart" show={@show} on_cancel="close_restart">
+      <:title>Restart {@app_name}?</:title>
+
+      <p class="text-sm">
+        The current version is re-booted into the standby slot and health-checked before traffic
+        moves — applying any changed environment variables or secrets. If the new boot fails its
+        health check, traffic stays on the running instance.
+      </p>
+      <p class="mt-2 text-sm">Current version: <.chip>{@version}</.chip></p>
+      <p :if={@error} class="mt-3 text-sm text-rust-700 dark:text-rust-300">{@error}</p>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-sm" phx-click="close_restart">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" phx-click="restart">Restart</button>
+      </div>
+    </.modal>
+    """
+  end
+
   @doc "The enter-maintenance dialog with an optional message."
   attr :show, :boolean, required: true
   attr :app_name, :string, required: true

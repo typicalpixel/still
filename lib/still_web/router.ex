@@ -82,6 +82,7 @@ defmodule StillWeb.Router do
 
     post "/applications/:application_name/deployments", DeploymentController, :create
     post "/applications/:application_name/rollback", DeploymentController, :rollback
+    post "/applications/:application_name/restart", DeploymentController, :restart
   end
 
   # Authenticated (remaining top-level resources).

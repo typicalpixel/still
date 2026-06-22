@@ -43,6 +43,8 @@ defmodule Still.Orchestrator do
       used for `trigger_deployment/2`
     * `:rollback_agent_caller` — 2-arity fn with the same shape, used for
       `trigger_rollback/2`. The agent interprets the same struct as a rollback.
+    * `:restart_agent_caller` — 2-arity fn with the same shape, used for
+      `trigger_restart/2`. The agent interprets the same struct as a restart.
     * `:artifact_stager` — 2-arity fn `(application, deployment) -> :ok | {:error, reason}`
       that stages the artifact on the controller before fanning out to agents.
       Defaults to `&default_artifact_stager/2` which downloads via the
@@ -74,6 +76,20 @@ defmodule Still.Orchestrator do
   def trigger_rollback(%Actor{} = actor, %Application{} = application, attrs)
       when is_map(attrs) do
     GenServer.call(__MODULE__, {:trigger_rollback, actor, application, attrs})
+  end
+
+  @doc """
+  Triggers a restart. Creates a new deployment row pinned to the application's
+  current live version, then calls each agent's `{:restart, spec}` handler
+  server-by-server — re-booting that version into the standby slot, health-
+  checking it, then cutting traffic over. Returns `{:ok, %Deployment{}}` on
+  accept, `{:error, :not_deployed}` when the application has never deployed
+  successfully, `{:error, :unsupported_for_type}` for a static site, or any of
+  the same preconditions as `trigger_deployment/2`.
+  """
+  def trigger_restart(%Actor{} = actor, %Application{} = application, attrs)
+      when is_map(attrs) do
+    GenServer.call(__MODULE__, {:trigger_restart, actor, application, attrs})
   end
 
   @doc """
@@ -119,6 +135,7 @@ defmodule Still.Orchestrator do
        agent_caller: Keyword.get(opts, :agent_caller, &default_agent_caller/2),
        rollback_agent_caller:
          Keyword.get(opts, :rollback_agent_caller, &default_rollback_caller/2),
+       restart_agent_caller: Keyword.get(opts, :restart_agent_caller, &default_restart_caller/2),
        route_caller: Keyword.get(opts, :route_caller, &default_route_caller/2),
        artifact_stager: Keyword.get(opts, :artifact_stager, &default_artifact_stager/2),
        notifier: Keyword.get(opts, :notifier)
@@ -179,6 +196,32 @@ defmodule Still.Orchestrator do
             application,
             servers,
             state.rollback_agent_caller,
+            state.artifact_stager,
+            state.notifier
+          )
+
+          {:reply, {:ok, deployment}, state}
+
+        {:error, _} = error ->
+          {:reply, error, state}
+      end
+    end
+  end
+
+  def handle_call({:trigger_restart, actor, application, attrs}, _from, state)
+      when is_map(state) do
+    if MapSet.member?(state.in_progress, application.name) do
+      {:reply, {:error, :deployment_in_progress}, state}
+    else
+      case validate_and_create_restart(actor, application, attrs) do
+        {:ok, deployment, servers} ->
+          state = %{state | in_progress: MapSet.put(state.in_progress, application.name)}
+
+          spawn_rolling_task(
+            deployment,
+            application,
+            servers,
+            state.restart_agent_caller,
             state.artifact_stager,
             state.notifier
           )
@@ -252,6 +295,29 @@ defmodule Still.Orchestrator do
         attrs =
           attrs
           |> Map.put_new(:source, "rollback")
+          |> Map.merge(%{version: version, artifact_url: artifact_url})
+
+        validate_and_create(actor, application, attrs)
+    end
+  end
+
+  # Static sites have no process to re-boot, so reject before creating a row or
+  # calling any agent (the agent's restart step provider would have no list to
+  # run). The current live version's row supplies a real version/artifact_url to
+  # stamp the restart record with; the agent re-boots its own on-disk current.
+  defp validate_and_create_restart(_actor, %Application{type: :static_site}, _attrs) do
+    {:error, :unsupported_for_type}
+  end
+
+  defp validate_and_create_restart(actor, application, attrs) do
+    case Deployments.get_current_deployment(application) do
+      nil ->
+        {:error, :not_deployed}
+
+      %{version: version, artifact_url: artifact_url} ->
+        attrs =
+          attrs
+          |> Map.put_new(:source, "restart")
           |> Map.merge(%{version: version, artifact_url: artifact_url})
 
         validate_and_create(actor, application, attrs)
@@ -356,8 +422,10 @@ defmodule Still.Orchestrator do
     type =
       case {status, deployment.source} do
         {:completed, "rollback"} -> :rollback_completed
+        {:completed, "restart"} -> :restart_completed
         {:completed, _} -> :deploy_completed
         {:failed, "rollback"} -> :rollback_failed
+        {:failed, "restart"} -> :restart_failed
         {:failed, _} -> :deploy_failed
       end
 
@@ -536,6 +604,14 @@ defmodule Still.Orchestrator do
     GenServer.call(
       {Still.Agent.DeploymentManager, node},
       {:rollback, spec},
+      120_000
+    )
+  end
+
+  defp default_restart_caller(node, spec) when is_atom(node) do
+    GenServer.call(
+      {Still.Agent.DeploymentManager, node},
+      {:restart, spec},
       120_000
     )
   end

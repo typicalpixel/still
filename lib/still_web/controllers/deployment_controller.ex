@@ -10,7 +10,7 @@ defmodule StillWeb.DeploymentController do
   action_fallback StillWeb.FallbackController
 
   plug StillWeb.Plugs.Authorize, :read when action in [:index, :show]
-  plug StillWeb.Plugs.Authorize, :deploy when action in [:create]
+  plug StillWeb.Plugs.Authorize, :deploy when action in [:create, :restart]
   plug StillWeb.Plugs.Authorize, :rollback when action in [:rollback]
 
   alias Still.Audit.Actor
@@ -129,6 +129,39 @@ defmodule StillWeb.DeploymentController do
 
     with {:ok, deployment} <-
            Orchestrator.trigger_rollback(Actor.from_conn(conn), scope.application, attrs) do
+      conn |> put_status(:accepted) |> json(DeploymentJSON.render_created(deployment))
+    end
+  end
+
+  operation(:restart,
+    summary: "Restart the application's current version",
+    description:
+      "Re-boots the application's current version into its standby slot, waits for " <>
+        "the health check to pass, then cuts traffic over. If the new boot fails its " <>
+        "health check, traffic is not moved and the running instance keeps serving. " <>
+        "Use this to apply changed environment variables or secrets.",
+    parameters: [
+      application_name: [in: :path, schema: %OpenApiSpex.Schema{type: :string}, required: true]
+    ],
+    responses: [
+      accepted:
+        {"Restart deployment created", "application/json", Envelope.single(Schemas.Deployment)},
+      conflict:
+        {"Deployment in progress, application not deployed, or insufficient healthy agents",
+         "application/json", Schemas.Error},
+      unprocessable_entity:
+        {"Restart is not supported for this application type", "application/json", Schemas.Error},
+      forbidden: {"Deploy permission required", "application/json", Schemas.Error}
+    ]
+  )
+
+  @doc "Restarts the application's current version into its standby slot."
+  def restart(%Plug.Conn{} = conn, _params) do
+    scope = conn.assigns.current_scope
+    attrs = %{initiated_by: "user:#{conn.assigns.current_user.email}"}
+
+    with {:ok, deployment} <-
+           Orchestrator.trigger_restart(Actor.from_conn(conn), scope.application, attrs) do
       conn |> put_status(:accepted) |> json(DeploymentJSON.render_created(deployment))
     end
   end

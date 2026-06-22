@@ -78,6 +78,25 @@ defmodule Still.Agent.DeploymentManager do
   end
 
   @doc """
+  Restarts the application: re-boots its *current* on-disk version into the
+  standby slot, health-checks it, and only then flips Caddy over — so a changed
+  env var or secret that breaks boot leaves the old slot serving instead of
+  taking the app down.
+
+  The caller passes a deploy-shaped spec with the application's current config;
+  the target `version` is read from the agent's on-disk state, so each server
+  authoritatively re-boots exactly what it currently runs (any `:version` on the
+  passed spec is replaced).
+
+  Returns `{:ok, version}` on success, `{:error, :not_deployed}` when the
+  application has no current version on this server, or
+  `{:error, %{step:, reason:}}` if a restart step fails.
+  """
+  def restart(spec) when is_map(spec) do
+    GenServer.call(__MODULE__, {:restart, spec}, :infinity)
+  end
+
+  @doc """
   Rebuilds the application's serving Caddy route from its currently-active
   slot and the `domain`/`path_prefix` in `spec` — no artifact staging, no
   slot flip, no hooks. Used when an app's routing fields change between
@@ -99,10 +118,14 @@ defmodule Still.Agent.DeploymentManager do
     rollback_step_provider =
       Keyword.get(opts, :rollback_step_provider, &default_rollback_steps_for/1)
 
+    restart_step_provider =
+      Keyword.get(opts, :restart_step_provider, &default_restart_steps_for/1)
+
     {:ok,
      %{
        step_provider: step_provider,
-       rollback_step_provider: rollback_step_provider
+       rollback_step_provider: rollback_step_provider,
+       restart_step_provider: restart_step_provider
      }}
   end
 
@@ -134,6 +157,28 @@ defmodule Still.Agent.DeploymentManager do
       {:ok, context} ->
         steps = state.rollback_step_provider.(spec.type)
         result = run_steps(steps, context)
+        finish_log_capture()
+
+        case result do
+          {:ok, ctx} ->
+            {:reply, {:ok, ctx.spec.version}, state}
+
+          {:error, _} = error ->
+            {:reply, stop_target_on_health_failure(error, context, state), state}
+        end
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call({:restart, spec}, _from, state) when is_map(state) do
+    case build_restart_context(spec) do
+      {:ok, context} ->
+        steps = state.restart_step_provider.(spec.type)
+        result = run_steps(steps, context)
+        # Capture-then-stop, same as deploy/rollback: a failed restart leaves a
+        # crash-looping standby slot, so flush its journal before it's stopped.
         finish_log_capture()
 
         case result do
@@ -247,16 +292,20 @@ defmodule Still.Agent.DeploymentManager do
   @doc """
   Returns the rollback step list for the given application type.
 
-  Rollback reuses the on-disk release from the previous slot, so it skips
-  download/unpack/symlink. For `:elixir_release` and `:process`, rollback
-  restarts the previous slot, health-checks it, flips Caddy back, stops
-  the now-inactive slot, and updates `state.json`. For `:static_site`,
-  rollback flips Caddy back and updates `state.json` — no process to
-  start or stop.
+  Rollback reuses the previous version's already-unpacked release (download and
+  unpack are skipped), but it re-points the standby slot's `current_<slot>`
+  symlink at that release first rather than trusting wherever the slot currently
+  points — a prior restart may have re-pointed the standby at the current
+  version, so the symlink can't be assumed to target the rollback version. For
+  `:elixir_release` and `:process`, rollback then restarts the standby slot,
+  health-checks it, flips Caddy back, stops the now-inactive slot, and updates
+  `state.json`. For `:static_site`, rollback flips Caddy back and updates
+  `state.json` — no process to start or stop.
   """
   def default_rollback_steps_for(:elixir_release) do
     [
       {:pre_rollback, &pre_rollback_hook/1},
+      {:symlinking, &symlink/1},
       {:starting, &start/1},
       {:health_checking, &health_check/1},
       {:switching, &switch_caddy/1},
@@ -279,6 +328,42 @@ defmodule Still.Agent.DeploymentManager do
       {:cleanup, &cleanup/1},
       {:post_rollback, &post_rollback_hook/1}
     ]
+  end
+
+  @doc """
+  Returns the restart step list for the given application type.
+
+  Restart reuses the on-disk release of the current version, so it skips
+  download/unpack — but unlike rollback it keeps `symlinking`, because the
+  standby slot's `current_<slot>` symlink may point at an older release and must
+  be re-pointed at the current one. For `:elixir_release` and `:process` it then
+  restarts the standby slot, health-checks it, flips Caddy over, and stops the
+  old slot. Restart runs no hooks — it is a pure re-boot of unchanged code, so
+  re-running the `release`/migration hook would be wrong.
+
+  `:static_site` has no process to restart and is rejected upstream (the
+  orchestrator returns `:unsupported_for_type`); this clause is a tripwire
+  against accidental wiring.
+  """
+  def default_restart_steps_for(:elixir_release) do
+    [
+      {:symlinking, &symlink/1},
+      {:starting, &start/1},
+      {:health_checking, &health_check/1},
+      {:switching, &switch_caddy/1},
+      {:monitoring, &update_health_monitor/1},
+      {:draining, &drain/1},
+      {:stopping_old, &stop_old/1},
+      {:cleanup, &cleanup/1}
+    ]
+  end
+
+  def default_restart_steps_for(:process) do
+    default_restart_steps_for(:elixir_release)
+  end
+
+  def default_restart_steps_for(:static_site) do
+    {:error, :unsupported_for_type}
   end
 
   defp build_context(spec) when is_map(spec) do
@@ -338,6 +423,21 @@ defmodule Still.Agent.DeploymentManager do
 
       _ ->
         {:error, :no_previous_version}
+    end
+  end
+
+  defp build_restart_context(spec) when is_map(spec) do
+    case StatePersistence.read(spec.application) do
+      {:ok, %ApplicationState{current_version: cur}} when not is_nil(cur) ->
+        # Pin the version to what this server currently runs and tag the context
+        # so cleanup preserves previous_version (the version isn't changing, so a
+        # restart must not clobber the rollback target).
+        with {:ok, ctx} <- build_context(Map.put(spec, :version, cur)) do
+          {:ok, Map.put(ctx, :restart?, true)}
+        end
+
+      _ ->
+        {:error, :not_deployed}
     end
   end
 
@@ -601,7 +701,7 @@ defmodule Still.Agent.DeploymentManager do
       active_slot: Atom.to_string(ctx.target_slot),
       active_port: active_port_for(ctx),
       current_version: ctx.spec.version,
-      previous_version: previous_version(ctx.current_state),
+      previous_version: previous_version_for(ctx),
       last_health_check_at: nil
     }
 
@@ -650,6 +750,15 @@ defmodule Still.Agent.DeploymentManager do
 
   defp previous_version(nil), do: nil
   defp previous_version(%ApplicationState{current_version: v}), do: v
+
+  # On restart the version doesn't change, so keep the existing previous_version
+  # — recomputing it (as deploy/rollback do) would clobber the rollback target
+  # with the current version. Deploy/rollback contexts carry no :restart? key and
+  # fall through to the recompute.
+  defp previous_version_for(%{restart?: true, current_state: %ApplicationState{} = state}),
+    do: state.previous_version
+
+  defp previous_version_for(ctx), do: previous_version(ctx.current_state)
 
   defp start(ctx) when is_map(ctx) do
     with :ok <- write_slot_env_file(ctx),

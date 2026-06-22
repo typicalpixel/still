@@ -273,6 +273,17 @@ curl -sS -X POST $STILL_URL/api/applications/hello/rollback \
 
 This runs a full rolling deploy using the prior deployment's artifact. Rollback is strictly one step back; to go further, deploy an older version as a new deployment.
 
+## Restart
+
+Re-boot an application's current version — the way to apply changed environment variables or secrets, which are only read at boot:
+
+```sh
+curl -sS -X POST $STILL_URL/api/applications/hello/restart \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+This reuses the on-disk release instead of fetching a new artifact: the current version boots into the standby slot, and traffic only moves once it passes its health check. If the new boot fails — a bad secret, a missing variable — traffic stays on the running instance, so a broken config change can't take the application down. Requires `deploy` permission. Static sites have no process to restart and return `422`.
+
 ## Maintenance mode
 
 Park an application behind a maintenance page without tearing down its deploy. Caddy serves a `503` on the app's domain instead of proxying to it. Deploys still work while it's parked, and `503` tells clients and crawlers the outage is temporary. Toggle it from the application's dashboard page, or via the API:
