@@ -2,7 +2,7 @@
 
 An open-source, API-first deployment platform for bare metal Linux servers. Rolling deploys, health checks, and automatic rollbacks with Caddy and systemd, without containers, Kubernetes, or vendor lock-in.
 
-**Status: pre-alpha.** Under active development. Not recommended for production yet.
+**Status: beta.** Under active development. Test it before relying on it in production.
 
 ## How it works
 
@@ -22,7 +22,7 @@ Linux only. Tested on Ubuntu 22.04 and 24.04.
 curl -fsSL https://deploystill.com/install.sh | sudo sh
 ```
 
-Pre-alpha: the URL above is not live yet. Run the installer directly from a checkout:
+The install URL above is not live yet. Run the installer directly from a checkout:
 
 ```sh
 git clone https://github.com/typicalpixel/still.git
