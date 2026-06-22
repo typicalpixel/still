@@ -467,12 +467,13 @@ defmodule Still.Agent.DeploymentManagerTest do
   end
 
   describe "default_rollback_steps_for/1" do
-    test ":elixir_release skips download/unpack/symlink and reuses the on-disk release" do
+    test ":elixir_release skips download/unpack but re-symlinks the standby to the target" do
       names =
         DeploymentManager.default_rollback_steps_for(:elixir_release) |> Enum.map(&elem(&1, 0))
 
       assert names == [
                :pre_rollback,
+               :symlinking,
                :starting,
                :health_checking,
                :switching,
@@ -570,6 +571,126 @@ defmodule Still.Agent.DeploymentManagerTest do
 
       assert {:error, %{step: :exploding_step, reason: "it broke"}} =
                DeploymentManager.rollback(spec)
+    end
+  end
+
+  describe "default_restart_steps_for/1" do
+    test ":elixir_release re-symlinks, restarts, health-checks, flips, and stops old" do
+      names =
+        DeploymentManager.default_restart_steps_for(:elixir_release) |> Enum.map(&elem(&1, 0))
+
+      assert names == [
+               :symlinking,
+               :starting,
+               :health_checking,
+               :switching,
+               :monitoring,
+               :draining,
+               :stopping_old,
+               :cleanup
+             ]
+    end
+
+    test "skips download/unpack (release already on disk) and runs no hooks" do
+      names =
+        DeploymentManager.default_restart_steps_for(:elixir_release) |> Enum.map(&elem(&1, 0))
+
+      refute :downloading in names
+      refute :unpacking in names
+      refute :pre_deploy in names
+      refute :release in names
+      refute :post_deploy in names
+    end
+
+    test ":process uses the same restart lifecycle as :elixir_release" do
+      assert DeploymentManager.default_restart_steps_for(:process) ==
+               DeploymentManager.default_restart_steps_for(:elixir_release)
+    end
+
+    test ":static_site is rejected — no process to restart" do
+      assert DeploymentManager.default_restart_steps_for(:static_site) ==
+               {:error, :unsupported_for_type}
+    end
+  end
+
+  describe "handle_call/3 :restart" do
+    test "returns :not_deployed when no state file exists for the application" do
+      state = %{
+        step_provider: fn _ -> [] end,
+        restart_step_provider: fn _ -> [] end
+      }
+
+      spec = valid_spec(%{application: "never-deployed-#{System.unique_integer([:positive])}"})
+
+      assert {:reply, {:error, :not_deployed}, ^state} =
+               DeploymentManager.handle_call({:restart, spec}, self(), state)
+    end
+
+    test "pins the current version into the standby slot and tags the context restart?" do
+      setup_tmp_applications_dir()
+      # The spec carries the default version "0.0.1+abc"; the agent must ignore it
+      # and re-boot the current on-disk version instead.
+      spec = valid_spec(%{application: "restart-unit-test"})
+
+      write_state(spec.application,
+        active_slot: "blue",
+        active_port: spec.port_blue,
+        current_version: "2.0.0",
+        previous_version: "1.0.0"
+      )
+
+      test_pid = self()
+
+      stub_restart = fn type ->
+        [
+          {:only,
+           fn ctx ->
+             send(test_pid, {:restart_ctx, type, ctx})
+             {:ok, ctx}
+           end}
+        ]
+      end
+
+      state = %{
+        step_provider: fn _ -> [] end,
+        restart_step_provider: stub_restart
+      }
+
+      assert {:reply, {:ok, "2.0.0"}, ^state} =
+               DeploymentManager.handle_call({:restart, spec}, self(), state)
+
+      assert_received {:restart_ctx, :elixir_release, ctx}
+      assert ctx.target_slot == :green
+      assert ctx.target_port == spec.port_green
+      assert ctx.previous_slot == :blue
+      assert ctx.spec.version == "2.0.0"
+      assert ctx.restart? == true
+    end
+  end
+
+  describe "start_link/1 + restart/1 with an injected restart step provider" do
+    test "exercises the public API and propagates a failing step's reason" do
+      setup_tmp_applications_dir()
+      spec = valid_spec(%{application: "restart-fail-test"})
+
+      write_state(spec.application,
+        active_slot: "blue",
+        active_port: spec.port_blue,
+        current_version: "2.0.0",
+        previous_version: "1.0.0"
+      )
+
+      failing_provider = fn _type ->
+        [{:exploding_step, fn _ctx -> {:error, "it broke"} end}]
+      end
+
+      start_supervised!(
+        {DeploymentManager,
+         step_provider: fn _ -> [] end, restart_step_provider: failing_provider}
+      )
+
+      assert {:error, %{step: :exploding_step, reason: "it broke"}} =
+               DeploymentManager.restart(spec)
     end
   end
 

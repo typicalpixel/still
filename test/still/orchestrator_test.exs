@@ -36,7 +36,7 @@ defmodule Still.OrchestratorTest do
     :sys.get_state(AgentConnectionManager)
   end
 
-  defp start_orchestrator(agent_caller, rollback_caller \\ nil) do
+  defp start_orchestrator(agent_caller, rollback_caller \\ nil, restart_caller \\ nil) do
     opts = [
       agent_caller: agent_caller,
       artifact_stager: fn _app, _dep -> :ok end,
@@ -46,6 +46,11 @@ defmodule Still.OrchestratorTest do
     opts =
       if rollback_caller,
         do: Keyword.put(opts, :rollback_agent_caller, rollback_caller),
+        else: opts
+
+    opts =
+      if restart_caller,
+        do: Keyword.put(opts, :restart_agent_caller, restart_caller),
         else: opts
 
     start_supervised!({Orchestrator, opts})
@@ -556,6 +561,124 @@ defmodule Still.OrchestratorTest do
 
       assert {:error, :deployment_in_progress} =
                Orchestrator.trigger_rollback(Actor.system(), app, %{initiated_by: "test"})
+
+      send(task_pid, :proceed)
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+    end
+  end
+
+  describe "trigger_restart/2" do
+    test "creates a deployment stamped with the current live version and calls the restart caller" do
+      {app, _server} = setup_app_with_server()
+
+      deploy_caller = fn _n, spec -> {:ok, spec.version} end
+
+      restart_spec_ref = :atomics.new(1, [])
+
+      restart_caller = fn _n, spec ->
+        assert spec.application == app.name
+        :atomics.put(restart_spec_ref, 1, 1)
+        {:ok, spec.version}
+      end
+
+      start_orchestrator(deploy_caller, nil, restart_caller)
+
+      {:ok, _} =
+        Orchestrator.trigger_deployment(Actor.system(), app, deploy_attrs(%{version: "1.0.0"}))
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+
+      assert {:ok, %Deployment{} = restart} =
+               Orchestrator.trigger_restart(Actor.system(), app, %{initiated_by: "test"})
+
+      assert restart.version == "1.0.0"
+      assert restart.artifact_url == "https://example.com/app.tar.gz"
+      assert restart.source == "restart"
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+      assert :atomics.get(restart_spec_ref, 1) == 1
+
+      assert Deployments.get_deployment!(restart.id).status == :completed
+    end
+
+    test "returns :not_deployed when the application has never deployed" do
+      {app, _server} = setup_app_with_server()
+      start_orchestrator(fn _n, s -> {:ok, s.version} end, nil, fn _n, s -> {:ok, s.version} end)
+
+      assert {:error, :not_deployed} =
+               Orchestrator.trigger_restart(Actor.system(), app, %{initiated_by: "test"})
+    end
+
+    test "rejects a static site with :unsupported_for_type" do
+      app = application_fixture(%{type: :static_site, exec_command: nil, health_check: nil})
+      start_orchestrator(fn _n, s -> {:ok, s.version} end, nil, fn _n, s -> {:ok, s.version} end)
+
+      assert {:error, :unsupported_for_type} =
+               Orchestrator.trigger_restart(Actor.system(), app, %{initiated_by: "test"})
+    end
+
+    test "audits :restart_completed and marks the deployment completed on success" do
+      {app, _server} = setup_app_with_server()
+      start_orchestrator(fn _n, s -> {:ok, s.version} end, nil, fn _n, s -> {:ok, s.version} end)
+
+      {:ok, _} =
+        Orchestrator.trigger_deployment(Actor.system(), app, deploy_attrs(%{version: "1.0.0"}))
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+
+      {:ok, restart} =
+        Orchestrator.trigger_restart(Actor.system(), app, %{initiated_by: "test"})
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+
+      assert [event] = Still.Audit.list(type: :restart_completed)
+      assert event.subject_id == restart.id
+    end
+
+    test "marks the restart as failed and audits :restart_failed when the agent errors" do
+      {app, _server} = setup_app_with_server()
+
+      deploy_caller = fn _n, spec -> {:ok, spec.version} end
+      restart_caller = fn _n, _spec -> {:error, "restart agent crashed"} end
+
+      start_orchestrator(deploy_caller, nil, restart_caller)
+
+      {:ok, _} =
+        Orchestrator.trigger_deployment(Actor.system(), app, deploy_attrs(%{version: "1.0.0"}))
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+
+      capture_log(fn ->
+        {:ok, restart} =
+          Orchestrator.trigger_restart(Actor.system(), app, %{initiated_by: "test"})
+
+        assert_receive {:deployment_complete, _, :failed}, 1_000
+
+        assert Deployments.get_deployment!(restart.id).status == :failed
+
+        assert [event] = Still.Audit.list(type: :restart_failed)
+        assert event.subject_id == restart.id
+      end)
+    end
+
+    test "rejects a restart while another deployment is in progress" do
+      {app, _server} = setup_app_with_server()
+      test_pid = self()
+
+      deploy_caller = fn _node, spec ->
+        send(test_pid, {:waiting, self()})
+        receive do: (:proceed -> {:ok, spec.version})
+      end
+
+      start_orchestrator(deploy_caller, nil, fn _n, s -> {:ok, s.version} end)
+
+      {:ok, _} =
+        Orchestrator.trigger_deployment(Actor.system(), app, deploy_attrs(%{version: "1.0.0"}))
+
+      assert_receive {:waiting, task_pid}, 1_000
+
+      assert {:error, :deployment_in_progress} =
+               Orchestrator.trigger_restart(Actor.system(), app, %{initiated_by: "test"})
 
       send(task_pid, :proceed)
       assert_receive {:deployment_complete, _, :completed}, 1_000

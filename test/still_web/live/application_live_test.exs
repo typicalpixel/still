@@ -553,6 +553,7 @@ defmodule StillWeb.ApplicationLiveTest do
         {Orchestrator,
          agent_caller: fn _node, spec -> {:ok, spec.version} end,
          rollback_agent_caller: fn _node, spec -> {:ok, spec.version} end,
+         restart_agent_caller: fn _node, spec -> {:ok, spec.version} end,
          artifact_stager: fn _app, _dep -> :ok end,
          notifier: self(),
          skip_orphan_recovery: true}
@@ -692,6 +693,65 @@ defmodule StillWeb.ApplicationLiveTest do
       refute lv |> element("#rollback button", "Cancel") |> render_click() =~
                "previous successful version"
     end
+
+    test "restarts the current version and navigates to it", %{conn: conn} do
+      app = assigned_app("api")
+      app |> deployment_fixture(%{version: "1.0.0"}) |> Deployments.complete_deployment!()
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/api")
+
+      lv |> element("button", "Restart") |> render_click()
+      result = lv |> element("#restart button", "Restart") |> render_click()
+
+      assert {:error, {:live_redirect, %{to: "/deployments/" <> _}}} = result
+      assert_receive {:deployment_complete, _id, _status}, 2_000
+    end
+
+    test "disables restart when there is no current deployment", %{conn: conn} do
+      assigned_app("api")
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/api")
+
+      assert has_element?(lv, "button[disabled]", "Restart")
+    end
+
+    test "hides restart for static sites", %{conn: conn} do
+      application_fixture(%{
+        name: "site",
+        type: :static_site,
+        exec_command: nil,
+        health_check: nil
+      })
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/site")
+
+      refute has_element?(lv, "button", "Restart")
+      assert has_element?(lv, "button", "Deploy")
+    end
+
+    test "rejects a restart when there is no current deployment", %{conn: conn} do
+      assigned_app("api")
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/api")
+
+      render_hook(lv, "open_restart", %{})
+      html = lv |> element("#restart button", "Restart") |> render_click()
+
+      assert html =~ "no current deployment"
+    end
+
+    test "opens then cancels the restart dialog", %{conn: conn} do
+      app = assigned_app("api")
+      app |> deployment_fixture(%{version: "1.0.0"}) |> Deployments.complete_deployment!()
+
+      {:ok, lv, _html} = live(conn, ~p"/applications/api")
+
+      assert lv |> element("button", "Restart") |> render_click() =~
+               "re-booted into the standby slot"
+
+      refute lv |> element("#restart button", "Cancel") |> render_click() =~
+               "re-booted into the standby slot"
+    end
   end
 
   describe "unauthenticated" do
@@ -716,6 +776,7 @@ defmodule StillWeb.ApplicationLiveTest do
 
       assert render_hook(lv, "open_deploy", %{}) =~ "Deploy permission required."
       assert render_hook(lv, "open_rollback", %{}) =~ "Rollback permission required."
+      assert render_hook(lv, "open_restart", %{}) =~ "Deploy permission required."
     end
   end
 end

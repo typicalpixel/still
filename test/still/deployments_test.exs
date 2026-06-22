@@ -657,6 +657,33 @@ defmodule Still.DeploymentsTest do
     end
   end
 
+  describe "get_current_deployment/1" do
+    setup do
+      app = application_fixture()
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server_fixture())
+      {:ok, app: app}
+    end
+
+    test "returns the most recent completed deployment", %{app: app} do
+      seed_completed(app, "1.0.0", nil, ~U[2026-01-01 00:00:00.000000Z])
+      seed_completed(app, "2.0.0", nil, ~U[2026-01-01 00:01:00.000000Z])
+
+      assert %Deployment{version: "2.0.0"} = Deployments.get_current_deployment(app)
+    end
+
+    test "returns nil before any successful deployment", %{app: app} do
+      assert Deployments.get_current_deployment(app) == nil
+    end
+
+    test "follows a rollback — the rolled-back-to version is current", %{app: app} do
+      seed_completed(app, "1.0.0", nil, ~U[2026-01-01 00:00:00.000000Z])
+      seed_completed(app, "2.0.0", nil, ~U[2026-01-01 00:01:00.000000Z])
+      seed_completed(app, "1.0.0", "rollback", ~U[2026-01-01 00:02:00.000000Z])
+
+      assert %Deployment{version: "1.0.0"} = Deployments.get_current_deployment(app)
+    end
+  end
+
   describe "get_rollback_target/1" do
     setup do
       app = application_fixture()

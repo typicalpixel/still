@@ -48,7 +48,7 @@ defmodule Still.Deployments do
       end)
       |> Audit.multi(actor, fn %{deployment: deployment} ->
         [
-          type: deploy_or_rollback_type(deployment),
+          type: initiated_audit_type(deployment),
           subject_type: :deployment,
           subject_id: deployment.id,
           payload: %{
@@ -73,8 +73,9 @@ defmodule Still.Deployments do
     end
   end
 
-  defp deploy_or_rollback_type(%Deployment{source: "rollback"}), do: :rollback_initiated
-  defp deploy_or_rollback_type(%Deployment{}), do: :deploy_initiated
+  defp initiated_audit_type(%Deployment{source: "rollback"}), do: :rollback_initiated
+  defp initiated_audit_type(%Deployment{source: "restart"}), do: :restart_initiated
+  defp initiated_audit_type(%Deployment{}), do: :deploy_initiated
 
   @default_list_limit 50
   @max_list_limit 500
@@ -431,6 +432,21 @@ defmodule Still.Deployments do
   """
   def deployment_status(id) when is_binary(id) do
     Repo.one(from d in Deployment, where: d.id == ^id, select: d.status)
+  end
+
+  @doc """
+  Returns the application's current live deployment — the most recent completed
+  deployment, or `nil` when the application has never deployed successfully.
+  Restart stamps this version/artifact onto the restart record; the agent
+  re-boots its own on-disk current version regardless.
+  """
+  def get_current_deployment(%Application{} = application) do
+    Repo.one(
+      from d in Deployment,
+        where: d.application_id == ^application.id and d.status == :completed,
+        order_by: [desc: d.completed_at],
+        limit: 1
+    )
   end
 
   @doc """

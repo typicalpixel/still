@@ -88,6 +88,18 @@ defmodule StillWeb.FallbackController do
     |> json(%{error: %{message: "No previous successful deployment to roll back to"}})
   end
 
+  def call(%Plug.Conn{} = conn, {:error, :not_deployed}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{error: %{message: "This application has no current deployment to restart"}})
+  end
+
+  def call(%Plug.Conn{} = conn, {:error, :unsupported_for_type}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: %{message: "Restart is not supported for this application type"}})
+  end
+
   def call(%Plug.Conn{} = conn, {:error, :last_admin}) do
     conn
     |> put_status(:conflict)

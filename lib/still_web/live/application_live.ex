@@ -120,6 +120,15 @@ defmodule StillWeb.ApplicationLive do
             Roll back
           </button>
           <button
+            :if={@can_deploy and @app.type != :static_site}
+            type="button"
+            class="btn btn-sm"
+            phx-click="open_restart"
+            disabled={not @restart_available}
+          >
+            Restart
+          </button>
+          <button
             :if={@can_deploy}
             type="button"
             class="btn btn-sm btn-primary"
@@ -266,6 +275,12 @@ defmodule StillWeb.ApplicationLive do
         app_name={@app.name}
         version={common_version(@status)}
         error={@rollback_error}
+      />
+      <.restart_dialog
+        show={@restart_open}
+        app_name={@app.name}
+        version={common_version(@status)}
+        error={@restart_error}
       />
       <.maintenance_dialog
         show={@maintenance_open}
@@ -460,6 +475,20 @@ defmodule StillWeb.ApplicationLive do
   def handle_event("rollback", _params, socket),
     do: authorize_event(socket, :rollback, &rollback/1)
 
+  def handle_event("open_restart", _params, socket),
+    do:
+      authorize_event(
+        socket,
+        :deploy,
+        &{:noreply, &1 |> assign(:restart_open, true) |> assign(:restart_error, nil)}
+      )
+
+  def handle_event("close_restart", _params, socket),
+    do: {:noreply, assign(socket, :restart_open, false)}
+
+  def handle_event("restart", _params, socket),
+    do: authorize_event(socket, :deploy, &restart/1)
+
   def handle_event("open_maintenance", _params, socket),
     do:
       authorize_event(
@@ -647,6 +676,19 @@ defmodule StillWeb.ApplicationLive do
     end
   end
 
+  defp restart(socket) do
+    case Orchestrator.trigger_restart(current_actor(socket), socket.assigns.app, %{
+           initiated_by: initiated_by(socket)
+         }) do
+      {:ok, deployment} ->
+        {:noreply, push_navigate(socket, to: ~p"/deployments/#{deployment.id}")}
+
+      {:error, _reason} ->
+        {:noreply,
+         assign(socket, :restart_error, "Couldn't restart — there's no current deployment.")}
+    end
+  end
+
   defp load(socket) do
     case Applications.get_application_by_name(socket.assigns.name) do
       nil ->
@@ -670,6 +712,10 @@ defmodule StillWeb.ApplicationLive do
         |> assign(
           :rollback_available,
           has_servers and Deployments.get_rollback_target(app) != nil
+        )
+        |> assign(
+          :restart_available,
+          has_servers and Deployments.get_current_deployment(app) != nil
         )
         |> assign(:health, row_health(status))
         |> assign(:fleet, build_fleet(status, servers_by_id, assignment_ids))
@@ -721,6 +767,8 @@ defmodule StillWeb.ApplicationLive do
     |> assign(:deploy_form, deploy_form())
     |> assign(:rollback_open, false)
     |> assign(:rollback_error, nil)
+    |> assign(:restart_open, false)
+    |> assign(:restart_error, nil)
     |> assign(:maintenance_open, false)
     |> assign(:maintenance_error, nil)
   end

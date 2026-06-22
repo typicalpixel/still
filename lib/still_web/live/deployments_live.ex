@@ -20,7 +20,7 @@ defmodule StillWeb.DeploymentsLive do
   # Long enough to see recent context, short enough that the list doesn't read
   # like an audit log (the API caps at 500 for a future "show more").
   @limit 15
-  @reload_on [:deploy_initiated, :rollback_initiated, :deployment_updated]
+  @reload_on [:deploy_initiated, :rollback_initiated, :restart_initiated, :deployment_updated]
 
   @doc "Mounts the deployments list and subscribes to the event stream."
   @impl true

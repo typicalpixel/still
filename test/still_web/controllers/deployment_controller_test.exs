@@ -27,6 +27,7 @@ defmodule StillWeb.DeploymentControllerTest do
         {Orchestrator,
          agent_caller: fn _n, s -> {:ok, s.version} end,
          rollback_agent_caller: fn _n, s -> {:ok, s.version} end,
+         restart_agent_caller: fn _n, s -> {:ok, s.version} end,
          artifact_stager: fn _app, _dep -> :ok end,
          notifier: self()}
       )
@@ -286,6 +287,17 @@ defmodule StillWeb.DeploymentControllerTest do
 
       assert body["error"]["detail"]["required"] == "rollback"
     end
+
+    test "POST /api/applications/:name/restart rejects a read-only key with 403", %{conn: conn} do
+      {app, _server} = setup_deployable_app()
+
+      body =
+        conn
+        |> post("/api/applications/#{app.name}/restart")
+        |> json_response(403)
+
+      assert body["error"]["detail"]["required"] == "deploy"
+    end
   end
 
   describe "POST /api/applications/:name/rollback" do
@@ -328,6 +340,54 @@ defmodule StillWeb.DeploymentControllerTest do
 
       # A rollback recreates a deployment row stamped with the previous version,
       # so the response echoes the rollback target.
+      assert body["data"]["version"] == "1.0.0"
+      assert body["data"]["artifact_url"] == "https://example.com/v1.tar.gz"
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+    end
+  end
+
+  describe "POST /api/applications/:name/restart" do
+    test "returns 409 when the application has no current deployment", %{conn: conn} do
+      {app, _server} = setup_deployable_app()
+
+      body =
+        conn
+        |> post("/api/applications/#{app.name}/restart")
+        |> json_response(409)
+
+      assert body["error"]["message"] =~ "no current deployment"
+    end
+
+    test "returns 422 for a static site", %{conn: conn} do
+      app = application_fixture(%{type: :static_site, exec_command: nil, health_check: nil})
+      {:ok, _} = Applications.assign_server(Actor.system(), app, server_fixture())
+
+      body =
+        conn
+        |> post("/api/applications/#{app.name}/restart")
+        |> json_response(422)
+
+      assert body["error"]["message"] =~ "not supported"
+    end
+
+    test "restarts the current version and echoes it", %{conn: conn} do
+      {app, _server} = setup_deployable_app()
+
+      conn
+      |> post("/api/applications/#{app.name}/deployments", %{
+        "version" => "1.0.0",
+        "artifact_url" => "https://example.com/v1.tar.gz"
+      })
+      |> json_response(201)
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+
+      body =
+        conn
+        |> post("/api/applications/#{app.name}/restart")
+        |> json_response(202)
+
       assert body["data"]["version"] == "1.0.0"
       assert body["data"]["artifact_url"] == "https://example.com/v1.tar.gz"
 
