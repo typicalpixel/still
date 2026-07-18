@@ -26,6 +26,9 @@ jobs:
       - name: Compile
         run: mix compile --warnings-as-errors
 
+      - name: Build assets
+        run: mix assets.deploy
+
       - name: Build release
         run: mix release --overwrite
 
