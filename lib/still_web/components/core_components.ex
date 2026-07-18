@@ -397,7 +397,10 @@ defmodule StillWeb.CoreComponents do
           <tr
             :for={row <- @rows}
             id={@row_id && @row_id.(row)}
-            class="hairline border-b last:border-b-0 hover:bg-paper-100 dark:hover:bg-ink-700/30"
+            class={[
+              "hairline border-b last:border-b-0",
+              @row_click && "hover:bg-paper-100 dark:hover:bg-ink-700/30"
+            ]}
           >
             <td
               :for={col <- @col}

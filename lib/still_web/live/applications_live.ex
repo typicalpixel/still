@@ -201,6 +201,7 @@ defmodule StillWeb.ApplicationsLive do
         "exec_command" => "",
         "exec_start_pre" => "",
         "exec_stop" => "",
+        "exec_console" => "",
         "min_healthy" => "1",
         "hc_path" => "/health",
         "hc_interval" => "5000",
@@ -229,6 +230,7 @@ defmodule StillWeb.ApplicationsLive do
     |> Map.put("exec_command", params["exec_command"])
     |> Map.put("exec_start_pre", blank_to_nil(params["exec_start_pre"]))
     |> Map.put("exec_stop", blank_to_nil(params["exec_stop"]))
+    |> Map.put("exec_console", blank_to_nil(params["exec_console"]))
   end
 
   defp put_exec(attrs, _type, _params), do: attrs

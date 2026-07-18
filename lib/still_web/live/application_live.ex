@@ -96,7 +96,7 @@ defmodule StillWeb.ApplicationLive do
           <button
             :if={@can_deploy and @app.maintenance}
             type="button"
-            class="btn btn-sm"
+            class="btn btn-sm btn-tide"
             phx-click="exit_maintenance"
           >
             Exit maintenance
@@ -104,16 +104,23 @@ defmodule StillWeb.ApplicationLive do
           <button
             :if={@can_deploy and !@app.maintenance}
             type="button"
-            class="btn btn-sm"
+            class="btn btn-sm btn-tide"
             phx-click="open_maintenance"
             disabled={not @has_servers}
           >
             Maintenance
           </button>
+          <.link
+            :if={@can_deploy and @app.type == :elixir_release}
+            navigate={~p"/applications/#{@app.name}/console"}
+            class="btn btn-sm btn-tide"
+          >
+            Console
+          </.link>
           <button
             :if={@can_rollback}
             type="button"
-            class="btn btn-sm"
+            class="btn btn-sm btn-tide"
             phx-click="open_rollback"
             disabled={not @rollback_available}
           >
@@ -122,7 +129,7 @@ defmodule StillWeb.ApplicationLive do
           <button
             :if={@can_deploy and @app.type != :static_site}
             type="button"
-            class="btn btn-sm"
+            class="btn btn-sm btn-tide"
             phx-click="open_restart"
             disabled={not @restart_available}
           >
@@ -171,7 +178,7 @@ defmodule StillWeb.ApplicationLive do
         <.section_heading>
           Fleet
           <:actions>
-            <button :if={@can_admin} type="button" class="btn btn-sm" phx-click="open_assign">
+            <button :if={@can_admin} type="button" class="btn btn-sm btn-tide" phx-click="open_assign">
               Assign server
             </button>
           </:actions>
@@ -188,7 +195,7 @@ defmodule StillWeb.ApplicationLive do
         <.section_heading>
           Configuration
           <:actions>
-            <button :if={@can_admin} type="button" class="btn btn-sm" phx-click="open_config">
+            <button :if={@can_admin} type="button" class="btn btn-sm btn-tide" phx-click="open_config">
               Edit
             </button>
           </:actions>
@@ -200,7 +207,7 @@ defmodule StillWeb.ApplicationLive do
         <.section_heading>
           Environment
           <:actions>
-            <button :if={@can_admin} type="button" class="btn btn-sm" phx-click="open_env">Edit</button>
+            <button :if={@can_admin} type="button" class="btn btn-sm btn-tide" phx-click="open_env">Edit</button>
           </:actions>
         </.section_heading>
         <.app_env app={@app} />
@@ -210,7 +217,7 @@ defmodule StillWeb.ApplicationLive do
         <.section_heading>
           Lifecycle hooks
           <:actions>
-            <button :if={@can_admin} type="button" class="btn btn-sm" phx-click="open_hook_create">
+            <button :if={@can_admin} type="button" class="btn btn-sm btn-tide" phx-click="open_hook_create">
               Add hook
             </button>
           </:actions>
@@ -831,6 +838,7 @@ defmodule StillWeb.ApplicationLive do
     |> Map.put("exec_command", exec)
     |> Map.put("exec_start_pre", blank_to_nil(params["exec_start_pre"]))
     |> Map.put("exec_stop", blank_to_nil(params["exec_stop"]))
+    |> Map.put("exec_console", blank_to_nil(params["exec_console"]))
   end
 
   defp maybe_put_exec(attrs, _params), do: attrs

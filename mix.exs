@@ -4,7 +4,7 @@ defmodule Still.MixProject do
   def project do
     [
       app: :still,
-      version: "0.1.9",
+      version: "0.2.0",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -65,6 +65,7 @@ defmodule Still.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:ecto_sql, "~> 3.14"},
       {:ecto_sqlite3, ">= 0.0.0"},
+      {:erlexec, "~> 2.0"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:gettext, "~> 1.0"},
       {:heroicons,
@@ -82,7 +83,7 @@ defmodule Still.MixProject do
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 1.1.0"},
+      {:phoenix_live_view, "~> 1.2"},
       {:req, "~> 0.5"},
       {:six, "~> 0.3"},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},

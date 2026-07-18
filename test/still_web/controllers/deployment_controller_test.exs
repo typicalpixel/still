@@ -88,6 +88,40 @@ defmodule StillWeb.DeploymentControllerTest do
       assert_receive {:deployment_complete, _, :completed}, 1_000
     end
 
+    test "attributes to a caller-asserted initiated_by for shared keys", %{conn: conn} do
+      {app, _server} = setup_deployable_app()
+
+      body =
+        conn
+        |> post("/api/applications/#{app.name}/deployments", %{
+          "version" => "1.0.0",
+          "artifact_url" => "https://example.com/app.tar.gz",
+          "initiated_by" => "alice@corp"
+        })
+        |> json_response(201)
+
+      assert body["data"]["initiated_by"] == "api:alice@corp"
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+    end
+
+    test "defaults initiated_by to the authenticated user when unset", %{conn: conn} do
+      {app, _server} = setup_deployable_app()
+
+      body =
+        conn
+        |> post("/api/applications/#{app.name}/deployments", %{
+          "version" => "1.0.0",
+          "artifact_url" => "https://example.com/app.tar.gz",
+          "initiated_by" => "   "
+        })
+        |> json_response(201)
+
+      assert body["data"]["initiated_by"] =~ ~r/^user:/
+
+      assert_receive {:deployment_complete, _, :completed}, 1_000
+    end
+
     test "returns 409 when no servers are assigned", %{conn: conn} do
       app = application_fixture()
 

@@ -55,7 +55,12 @@ defmodule StillWeb.CaddyLive do
       </div>
 
       <div :if={!@forbidden} class="mt-4">
-        <form :if={@multi_node?} phx-change="select_target" class="mb-4 flex items-center gap-2">
+        <form
+          :if={@multi_node?}
+          id="caddy-target-form"
+          phx-change="select_target"
+          class="mb-4 flex items-center gap-2"
+        >
           <label for="caddy-target" class="text-[12px] text-paper-500 dark:text-ink-300">Node</label>
           <select id="caddy-target" name="target" class="select select-sm">
             <option value="controller" selected={@target == "controller"}>Controller</option>

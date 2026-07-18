@@ -251,17 +251,19 @@ defmodule Still.Applications.ApplicationTest do
       assert "can't be blank" in errors_on(changeset).exec_command
     end
 
-    test ":elixir_release allows optional exec_start_pre and exec_stop" do
+    test ":elixir_release allows optional exec_start_pre, exec_stop, and exec_console" do
       attrs =
         valid_elixir_release_attrs(%{
           exec_start_pre: "bin/my_api eval MyApi.Release.migrate",
-          exec_stop: "bin/my_api stop"
+          exec_stop: "bin/my_api stop",
+          exec_console: "bin/my_api remote"
         })
 
       changeset = Application.creation_changeset(%Application{}, attrs)
       assert changeset.valid?
       assert get_change(changeset, :exec_start_pre) == "bin/my_api eval MyApi.Release.migrate"
       assert get_change(changeset, :exec_stop) == "bin/my_api stop"
+      assert get_change(changeset, :exec_console) == "bin/my_api remote"
     end
 
     test ":elixir_release is valid without exec_start_pre or exec_stop" do
@@ -269,16 +271,21 @@ defmodule Still.Applications.ApplicationTest do
       assert changeset.valid?
     end
 
-    test ":static_site rejects exec_start_pre and exec_stop" do
+    test ":static_site rejects exec_start_pre, exec_stop, and exec_console" do
       changeset =
         Application.creation_changeset(
           %Application{},
-          valid_static_site_attrs(%{exec_start_pre: "bin/start", exec_stop: "bin/stop"})
+          valid_static_site_attrs(%{
+            exec_start_pre: "bin/start",
+            exec_stop: "bin/stop",
+            exec_console: "bin/remote"
+          })
         )
 
       errors = errors_on(changeset)
       assert "must be blank for static_site applications" in errors.exec_start_pre
       assert "must be blank for static_site applications" in errors.exec_stop
+      assert "must be blank for static_site applications" in errors.exec_console
     end
 
     test ":elixir_release requires health_check" do

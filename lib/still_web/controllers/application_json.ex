@@ -25,6 +25,7 @@ defmodule StillWeb.ApplicationJSON do
       path_prefix: app.path_prefix,
       exec_command: app.exec_command,
       exec_start_pre: app.exec_start_pre,
+      exec_console: app.exec_console,
       exec_stop: app.exec_stop,
       env_vars: app.env_vars,
       min_healthy: app.min_healthy,

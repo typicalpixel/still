@@ -8,12 +8,13 @@ credo/public_function_argument_pattern.ex ignored_variable? d3f40478
 credo/public_function_documentation.ex collect_defs 4bd7722b
 credo/public_function_documentation.ex db794f25
 credo/public_function_documentation.ex glob_matches? 951a396b
+lib/still/agent/console_manager.ex do_spawn_console 0f7a7b4d
 lib/still/agent/deploy_log_collector.ex 7cd42e86
 lib/still/agent/deploy_log_collector.ex ae25f31e
 lib/still/agent/deploy_log_collector.ex handle_info 98dadb7a
 lib/still/agent/deployment_manager.ex 16cc23b7
 lib/still/agent/deployment_manager.ex 4058b043
-lib/still/agent/deployment_manager.ex 84a1e9b3
+lib/still/agent/deployment_manager.ex fc957ca4
 lib/still/agent/deployment_manager.ex read_current_state 15a90428
 lib/still/agent/node_connector.ex init 650143be
 lib/still/agent/node_metrics.ex 96e7c006
@@ -27,5 +28,5 @@ lib/still/dev/standalone.ex ed8fd291
 lib/still/orchestrator.ex b451d0ad
 lib/still/orchestrator.ex execute_rolling_deploy 01165896
 lib/still/release.ex b61e7447
-test/support/integration_case.ex 7ee4e22e
+test/support/integration_case.ex 8e3d1636
 test/support/integration_fixtures.ex 7e5e5325

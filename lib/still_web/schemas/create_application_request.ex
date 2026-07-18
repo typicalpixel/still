@@ -42,6 +42,12 @@ defmodule StillWeb.Schemas.CreateApplicationRequest do
         maxLength: 1000,
         description: "Optional ExecStop command. Must be blank for static_site."
       },
+      exec_console: %OpenApiSpex.Schema{
+        type: :string,
+        maxLength: 1000,
+        description:
+          "Optional explicit remote-console command, for launch commands the automatic start→remote swap cannot handle. Must be blank for static_site."
+      },
       env_vars: %OpenApiSpex.Schema{
         type: :object,
         additionalProperties: %OpenApiSpex.Schema{type: :string}

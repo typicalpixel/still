@@ -54,6 +54,7 @@ defmodule Still.Application do
       {Still.Agent.NodeMetrics, controller_node: controller},
       {Still.Agent.DeployLogCollector, controller_node: controller},
       {Still.Agent.DeploymentManager, []},
+      {Still.Agent.ConsoleManager, []},
       {Still.Agent.HealthMonitor, reporter: &NodeConnector.report_health_transition/1}
     ]
   end
@@ -124,6 +125,7 @@ defmodule Still.Application do
       {Still.Agent.NodeMetrics, controller_node: Node.self()},
       {Still.Agent.DeployLogCollector, controller_node: Node.self()},
       {Still.Agent.DeploymentManager, []},
+      {Still.Agent.ConsoleManager, []},
       {Still.Agent.HealthMonitor, reporter: &NodeConnector.report_health_transition/1}
     ]
   end

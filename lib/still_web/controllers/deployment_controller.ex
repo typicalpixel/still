@@ -46,7 +46,7 @@ defmodule StillWeb.DeploymentController do
       version: params["version"],
       artifact_url: params["artifact_url"],
       source: params["source"],
-      initiated_by: "user:#{conn.assigns.current_user.email}"
+      initiated_by: initiated_by(conn, params["initiated_by"])
     }
 
     with {:ok, deployment} <-
@@ -54,6 +54,19 @@ defmodule StillWeb.DeploymentController do
       conn |> put_status(:created) |> json(DeploymentJSON.render_created(deployment))
     end
   end
+
+  # The authenticated actor (API key or user) is recorded by the audit trail
+  # regardless; `initiated_by` is a display attribution. When a caller asserts
+  # a human (a shared CI key naming the real committer) tag it `api:`; otherwise
+  # attribute to the authenticated user.
+  defp initiated_by(conn, asserted) when is_binary(asserted) do
+    case String.trim(asserted) do
+      "" -> initiated_by(conn, nil)
+      human -> "api:#{human}"
+    end
+  end
+
+  defp initiated_by(conn, _asserted), do: "user:#{conn.assigns.current_user.email}"
 
   operation(:index,
     summary: "List deployments, newest first",

@@ -61,7 +61,7 @@ defmodule StillWeb.AccountComponents do
       </div>
       <div
         id="theme-switch"
-        phx-hook="ThemeSwitch"
+        phx-hook=".ThemeSwitch"
         role="radiogroup"
         aria-label="Theme"
         class="hairline inline-flex overflow-hidden rounded-md border"
@@ -70,6 +70,29 @@ defmodule StillWeb.AccountComponents do
         <.theme_option value="dark" label="Dark" />
         <.theme_option value="system" label="System" />
       </div>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ThemeSwitch">
+        // Reflects the persisted theme preference onto the theme switch.
+        export default {
+          mounted() {
+            const KEY = "phx:theme"
+            this.sync = () => {
+              const pref = localStorage.getItem(KEY) || "system"
+              this.el.querySelectorAll("[data-phx-theme]").forEach((b) => {
+                b.setAttribute("aria-checked", b.dataset.phxTheme === pref ? "true" : "false")
+              })
+            }
+            this.sync()
+            this.el.addEventListener("click", (e) => {
+              if (e.target.closest("[data-phx-theme]")) requestAnimationFrame(() => this.sync())
+            })
+            this.onStorage = (e) => e.key === KEY && this.sync()
+            window.addEventListener("storage", this.onStorage)
+          },
+          destroyed() {
+            window.removeEventListener("storage", this.onStorage)
+          },
+        }
+      </script>
     </.panel>
     """
   end
