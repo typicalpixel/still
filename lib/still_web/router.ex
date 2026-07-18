@@ -144,6 +144,15 @@ defmodule StillWeb.Router do
       live "/settings", SettingsLive, :index
       live "/settings/audit", AuditLive, :index
     end
+
+    live_session :console,
+      on_mount: [
+        {StillWeb.UserAuth, :require_authenticated},
+        {StillWeb.UserAuth, :require_deploy},
+        {StillWeb.NavAssigns, :default}
+      ] do
+      live "/applications/:name/console", ConsoleLive, :show
+    end
   end
 
   if Application.compile_env(:still, :dev_routes) do

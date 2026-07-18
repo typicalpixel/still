@@ -68,3 +68,8 @@ config :still,
 config :still,
   artifacts_dir: Path.expand("../tmp/still_test_artifacts", __DIR__),
   artifact_base_url: "http://localhost:9090"
+
+# Suite is clean on both checks; raise so regressions fail loudly.
+config :phoenix_live_view, :test_warnings,
+  duplicate_id: :raise,
+  missing_form_id: :raise

@@ -78,6 +78,25 @@ defmodule StillWeb.Telemetry do
           "The time the connection spent waiting before being checked out for the query"
       ),
 
+      # Remote console metrics
+      last_value("still.console.opened.active",
+        description: "Active console sessions on this agent after the most recent open"
+      ),
+      counter("still.console.opened.active",
+        description: "Console sessions opened"
+      ),
+      counter("still.console.rejected.count",
+        tags: [:reason],
+        description: "Console opens rejected by a cap or rate limit"
+      ),
+      sum("still.console.output.bytes",
+        description: "Console output bytes forwarded to owners"
+      ),
+      counter("still.console.reaped.active",
+        tags: [:cause],
+        description: "Console sessions reaped, by cause"
+      ),
+
       # VM Metrics
       summary("vm.memory.total", unit: {:byte, :kilobyte}),
       summary("vm.total_run_queue_lengths.total"),

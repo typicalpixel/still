@@ -18,6 +18,13 @@ defmodule StillWeb.Schemas.CreateDeploymentRequest do
         type: :string,
         maxLength: 255,
         description: "Optional provenance tag — e.g. `git:main@abc1234`, `ci:nightly-prod`."
+      },
+      initiated_by: %OpenApiSpex.Schema{
+        type: :string,
+        maxLength: 255,
+        description:
+          "Optional human this deploy is attributed to, for shared CI keys (e.g. the commit author). " <>
+            "Caller-asserted — the API key remains the authenticated actor. Defaults to the key owner."
       }
     },
     required: [:version, :artifact_url]

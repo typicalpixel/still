@@ -78,6 +78,14 @@ config :still,
        :ingress_edge_port,
        String.to_integer(System.get_env("STILL_INGRESS_EDGE_PORT", "8080"))
 
+# erlexec (console PTYs) refuses to start under a root BEAM without an
+# explicit opt-in. Still's agent runs as root, so opt in when we are root;
+# euid via /proc/self ownership since the USER env var may be absent under
+# systemd.
+if match?({:ok, %{uid: 0}}, File.stat("/proc/self")) do
+  config :erlexec, root: true, user: ~c"root", limit_users: [~c"root"]
+end
+
 if config_env() == :prod and mode != :agent do
   database_path =
     System.get_env("DATABASE_PATH") ||

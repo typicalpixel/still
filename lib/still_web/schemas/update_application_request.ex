@@ -13,6 +13,7 @@ defmodule StillWeb.Schemas.UpdateApplicationRequest do
       path_prefix: %OpenApiSpex.Schema{type: :string, maxLength: 255},
       exec_command: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
       exec_start_pre: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
+      exec_console: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
       exec_stop: %OpenApiSpex.Schema{type: :string, maxLength: 1000},
       env_vars: %OpenApiSpex.Schema{
         type: :object,

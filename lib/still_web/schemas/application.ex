@@ -19,6 +19,7 @@ defmodule StillWeb.Schemas.Application do
       path_prefix: %OpenApiSpex.Schema{type: :string, nullable: true},
       exec_command: %OpenApiSpex.Schema{type: :string, nullable: true},
       exec_start_pre: %OpenApiSpex.Schema{type: :string, nullable: true},
+      exec_console: %OpenApiSpex.Schema{type: :string, nullable: true},
       exec_stop: %OpenApiSpex.Schema{type: :string, nullable: true},
       env_vars: %OpenApiSpex.Schema{
         type: :object,

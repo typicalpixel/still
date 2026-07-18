@@ -165,6 +165,8 @@ defmodule StillWeb.UserAuth do
     * `:mount_current_scope` — assigns `current_scope` (or `nil`).
     * `:require_authenticated` — assigns `current_scope`, redirecting to login
       when there is no authenticated user.
+    * `:require_deploy` — halts with a redirect to `/` unless the current
+      scope has `:deploy` permission. Mount after `:require_authenticated`.
   """
   def on_mount(:mount_current_scope, _params, session, socket) do
     {:cont, mount_current_scope(socket, session)}
@@ -180,6 +182,19 @@ defmodule StillWeb.UserAuth do
         socket
         |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
         |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
+
+      {:halt, socket}
+    end
+  end
+
+  def on_mount(:require_deploy, _params, _session, socket) do
+    if Scope.can?(socket.assigns.current_scope, :deploy) do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(:error, "Deploy permission required.")
+        |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}
     end

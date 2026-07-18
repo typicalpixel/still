@@ -324,6 +324,24 @@ defmodule Still.IntegrationCase do
     port
   end
 
+  @doc """
+  Polls `fun` every 100ms until it returns a truthy value, flunking after
+  `timeout_ms`. For conditions with no message to await (OS process death,
+  file removal).
+  """
+  def wait_until!(fun, timeout_ms \\ 10_000) when is_function(fun, 0) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_until!(fun, deadline)
+  end
+
+  defp do_wait_until!(fun, deadline) do
+    cond do
+      fun.() -> :ok
+      System.monotonic_time(:millisecond) > deadline -> raise "condition never became true"
+      true -> Process.sleep(100) && do_wait_until!(fun, deadline)
+    end
+  end
+
   defp wait_for_admin!(port, tries \\ 50)
 
   defp wait_for_admin!(_port, 0) do
@@ -383,6 +401,14 @@ defmodule Still.IntegrationCase do
     :erpc.call(peer_node, Application, :put_env, [:still, :caddy_req_options, []])
     :erpc.call(peer_node, Application, :put_env, [:still, :health_req_options, []])
     :erpc.call(peer_node, Application, :put_env, [:still, :artifact_req_options, []])
+
+    # The peer skips config/runtime.exs, so mirror its erlexec root opt-in —
+    # without it a root BEAM's erlexec port refuses to start.
+    if match?({:ok, %{uid: 0}}, File.stat("/proc/self")) do
+      :erpc.call(peer_node, Application, :put_env, [:erlexec, :root, true])
+      :erpc.call(peer_node, Application, :put_env, [:erlexec, :user, ~c"root"])
+      :erpc.call(peer_node, Application, :put_env, [:erlexec, :limit_users, [~c"root"]])
+    end
 
     if server_id = Map.get(ctx, :server_id) do
       :erpc.call(peer_node, Application, :put_env, [:still, :server_id, server_id])

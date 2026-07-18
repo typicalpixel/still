@@ -170,6 +170,9 @@ defmodule StillWeb.ApplicationComponents do
       <.detail_row :if={@app.exec_start_pre} label="Exec start pre" mono>
         {@app.exec_start_pre}
       </.detail_row>
+      <.detail_row :if={@app.exec_console} label="Exec console" mono>
+        {@app.exec_console}
+      </.detail_row>
       <.detail_row :if={@app.exec_stop} label="Exec stop" mono>{@app.exec_stop}</.detail_row>
       <.detail_row :if={@app.path_prefix} label="Path prefix" mono>{@app.path_prefix}</.detail_row>
       <.detail_row :if={@app.health_check} label="Health check" mono>
@@ -492,6 +495,12 @@ defmodule StillWeb.ApplicationComponents do
             placeholder="bin/orchard stop"
             class="input w-full font-mono"
           />
+          <.input
+            field={@form[:exec_console]}
+            label="Exec console (optional)"
+            placeholder="bin/orchard remote"
+            class="input w-full font-mono"
+          />
         </div>
 
         <div class="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
@@ -654,6 +663,11 @@ defmodule StillWeb.ApplicationComponents do
           <input name="exec_stop" value={@app.exec_stop} class="input input-bordered w-full" />
         </label>
 
+        <label :if={@app.type != :static_site} class="block">
+          <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Exec console (optional)</span>
+          <input name="exec_console" value={@app.exec_console} class="input input-bordered w-full" />
+        </label>
+
         <div class="grid grid-cols-2 gap-3">
           <label class="block">
             <span class="mb-1 block text-[12px] font-medium text-paper-600 dark:text-ink-200">Min healthy</span>
@@ -736,9 +750,26 @@ defmodule StillWeb.ApplicationComponents do
           name={"env[#{index}][key]"}
           value={row.key}
           placeholder="KEY"
-          phx-hook="EnvKey"
+          phx-hook=".EnvKey"
           class="input input-bordered input-sm w-full font-mono"
         />
+        <script :type={Phoenix.LiveView.ColocatedHook} name=".EnvKey">
+          // Doppler-style env var name input: force uppercase and fold any
+          // character outside [A-Z0-9_] to an underscore, in place, as the
+          // user types.
+          export default {
+            mounted() {
+              this.el.addEventListener("input", () => {
+                const caret = this.el.selectionStart
+                const next = this.el.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_")
+                if (next !== this.el.value) {
+                  this.el.value = next
+                  this.el.setSelectionRange(caret, caret)
+                }
+              })
+            },
+          }
+        </script>
         <input
           name={"env[#{index}][value]"}
           value={row.value}

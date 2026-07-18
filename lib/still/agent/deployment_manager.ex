@@ -968,6 +968,7 @@ defmodule Still.Agent.DeploymentManager do
       [
         "Type=simple",
         "WorkingDirectory=#{ctx.app_dir}/current_%i",
+        "Environment=LANG=C.UTF-8",
         "EnvironmentFile=#{ctx.app_dir}/slots/%i.env",
         user && "User=#{user}",
         exec_start_pre && "ExecStartPre=#{resolve_exec_command(exec_start_pre, ctx)}",

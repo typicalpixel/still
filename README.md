@@ -304,6 +304,66 @@ curl -sS -X PATCH $STILL_URL/api/applications/hello \
 
 The change takes effect immediately. The route is reconciled on the controller and on each hosting agent.
 
+## Remote console
+
+Open an interactive IEx console into a running `elixir_release` application, in
+the browser, from its dashboard page. It attaches to the live node with the
+release's own `bin/app remote` — the same thing you would get over SSH — routed
+through Still's existing controller-to-agent Erlang mesh. No SSH, no extra
+network surface, no CLI setup.
+
+Click **Console** on the application page (visible to admins on
+`elixir_release` apps). For a multi-server app, pick the host; the console
+attaches to that server's active slot. Closing the tab ends the session and
+reaps the process.
+
+### Prerequisite: distributed Erlang
+
+The console attaches to a *running* node, so the release must start with
+distribution enabled — the same `rel/env.sh.eex` setup described under
+[Distributed Erlang releases](#distributed-erlang-releases):
+
+```sh
+export RELEASE_DISTRIBUTION=name
+export RELEASE_NODE=${STILL_APPLICATION}-${STILL_TARGET_SLOT}@${STILL_NODE_HOST}
+```
+
+If a release runs with `RELEASE_DISTRIBUTION=none`, there is no node to attach
+to and the console reports that distribution is disabled. The magic cookie is
+baked into the release and inherited automatically, so no cookie configuration
+is needed.
+
+If your app is launched through a secrets wrapper (Doppler, Infisical, sops,
+…), Still derives the console command from your `exec_command` by swapping the
+trailing release subcommand — `bin/app start` becomes `bin/app remote`, wrapper
+prefix and all. For launch commands that hide the subcommand inside a quoted
+argument (e.g. `sops exec-env secrets.env 'bin/app start'`), set an explicit
+**Exec console** command (`exec_console`, e.g. `sops exec-env secrets.env
+'bin/app remote'`) on the application.
+
+### Security posture
+
+**The console runs as root, at the same trust level as a deploy.** `bin/app
+remote` is a full IEx into the live node: arbitrary code execution, every
+secret the app holds. This is deliberate and matches how Still already
+operates — it runs your release code as root on every deploy and every
+migration (`bin/app eval`), exactly like Kamal or the Docker daemon. The
+console makes that interactive; it does not make it more powerful.
+
+What that means for you:
+
+- The console is gated on the **admin** role and every open/close is audited
+  (actor, application, server, slot, duration). It is not a sandbox.
+- **A Still admin effectively has root on every agent host.** Do not grant Still
+  admin to anyone you would not give root.
+- In `standalone` mode the IEx is spawned by the same node that serves the
+  dashboard; the admin gate is the only boundary.
+
+Sessions are bounded: idle (15 min) and absolute (60 min) timeouts, per-user
+and per-agent concurrency caps, an open rate limit, and output backpressure so
+a runaway console cannot starve the link that also carries deploys. All limits
+are configurable under `config :still, :console`.
+
 ## Upgrade
 
 Upgrades are idempotent. Re-run the same one-liner:
