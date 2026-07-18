@@ -25,6 +25,10 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 still-*.tar
 
+# Compiled asset output — built by `mix assets.deploy` (CI) / `mix assets.build` (dev)
+/priv/static/assets/
+/priv/static/cache_manifest.json
+
 # Database files
 *.db
 *.db-*
