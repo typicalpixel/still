@@ -40,8 +40,14 @@ defmodule Still.Integration.ElixirReleaseTracingTest do
     assert {:ok, "0.0.1-a"} = DeploymentManager.deploy(spec(:release_a, "0.0.1-a", ports))
     assert fetch_body(caddy.http_port, "/") =~ "vA"
 
-    assert [%{"handler" => "tracing", "span" => @application}, %{"handler" => "reverse_proxy"}] =
-             app_route()["handle"]
+    assert [
+             %{
+               "handler" => "tracing",
+               "span" => @application,
+               "span_attributes" => %{"http.route" => @application}
+             },
+             %{"handler" => "reverse_proxy"}
+           ] = app_route()["handle"]
 
     RecordingServer.await_span!(otlp, @application)
 
@@ -49,8 +55,14 @@ defmodule Still.Integration.ElixirReleaseTracingTest do
     assert {:ok, "0.0.1-b"} = DeploymentManager.deploy(spec(:release_b, "0.0.1-b", ports))
     assert fetch_body(caddy.http_port, "/") =~ "vB"
 
-    assert [%{"handler" => "tracing", "span" => @application}, %{"handler" => "reverse_proxy"}] =
-             app_route()["handle"]
+    assert [
+             %{
+               "handler" => "tracing",
+               "span" => @application,
+               "span_attributes" => %{"http.route" => @application}
+             },
+             %{"handler" => "reverse_proxy"}
+           ] = app_route()["handle"]
   end
 
   defp spec(fixture, version, ports) do

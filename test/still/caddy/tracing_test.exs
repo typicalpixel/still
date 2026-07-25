@@ -91,6 +91,12 @@ defmodule Still.Caddy.TracingTest do
       assert [%{"handler" => "tracing", "span" => "my-api"}, %{"handler" => "reverse_proxy"}] =
                Tracing.prepend(handle, "my-api")
     end
+
+    @tag tracing: true
+    test "sets http.route to the application name so APM resource names split per app" do
+      [tracing | _] = Tracing.prepend([%{"handler" => "reverse_proxy"}], "my-api")
+      assert tracing["span_attributes"] == %{"http.route" => "my-api"}
+    end
   end
 
   describe "controller ingress routes" do
@@ -103,14 +109,30 @@ defmodule Still.Caddy.TracingTest do
     test "are traced with a span named after the application" do
       [route] = Ingress.build_routes([app_entry("my-api")])
 
-      assert [%{"handler" => "tracing", "span" => "my-api"}, %{"handler" => "reverse_proxy"}] =
-               route["handle"]
+      assert [
+               %{
+                 "handler" => "tracing",
+                 "span" => "my-api",
+                 "span_attributes" => %{"http.route" => "my-api"}
+               },
+               %{"handler" => "reverse_proxy"}
+             ] = route["handle"]
     end
 
     @tag tracing: true
     test "get one span name per application" do
       routes = Ingress.build_routes([app_entry("my-api"), app_entry("marketing")])
       assert Enum.map(routes, &hd(&1["handle"])["span"]) == ["my-api", "marketing"]
+    end
+
+    @tag tracing: true
+    test "get one http.route attribute per application" do
+      routes = Ingress.build_routes([app_entry("my-api"), app_entry("marketing")])
+
+      assert Enum.map(routes, &hd(&1["handle"])["span_attributes"]) == [
+               %{"http.route" => "my-api"},
+               %{"http.route" => "marketing"}
+             ]
     end
 
     @tag tracing: true
@@ -142,8 +164,14 @@ defmodule Still.Caddy.TracingTest do
     test "are traced with a span named after the application" do
       route = DeploymentManager.build_app_route(app_ctx())
 
-      assert [%{"handler" => "tracing", "span" => "my-api"}, %{"handler" => "reverse_proxy"}] =
-               route["handle"]
+      assert [
+               %{
+                 "handler" => "tracing",
+                 "span" => "my-api",
+                 "span_attributes" => %{"http.route" => "my-api"}
+               },
+               %{"handler" => "reverse_proxy"}
+             ] = route["handle"]
     end
 
     @tag tracing: true

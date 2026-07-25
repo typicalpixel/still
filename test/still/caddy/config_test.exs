@@ -203,6 +203,37 @@ defmodule Still.Caddy.ConfigTest do
     test "rejects a non-binary span" do
       assert_raise FunctionClauseError, fn -> Config.tracing(span: :api) end
     end
+
+    test "emits span_attributes when given" do
+      assert Config.tracing(span: "my-api", span_attributes: %{"http.route" => "my-api"}) ==
+               %{
+                 "handler" => "tracing",
+                 "span" => "my-api",
+                 "span_attributes" => %{"http.route" => "my-api"}
+               }
+    end
+
+    test "rejects an empty span_attributes map" do
+      assert_raise FunctionClauseError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{})
+      end
+    end
+
+    test "rejects non-string span_attributes entries" do
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{"http.route" => 42})
+      end
+
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{route: "my-api"})
+      end
+    end
+
+    test "rejects span_attributes values containing Caddy placeholder braces" do
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{"http.route" => "{http.request.uri}"})
+      end
+    end
   end
 
   describe "file_server/0, vars/1, rewrite/1, subroute/1" do

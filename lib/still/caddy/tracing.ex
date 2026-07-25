@@ -22,12 +22,15 @@ defmodule Still.Caddy.Tracing do
 
   @doc """
   Prepends a `tracing` handler named `span` to `handle` so the span covers
-  everything the route does. Returns `handle` unchanged when tracing is
-  disabled.
+  everything the route does. The span also carries an `http.route` attribute
+  set to `span`, so APM backends that build resource names from
+  `{http.method} {http.route}` (Datadog among them) split traffic per
+  application instead of collapsing it into one resource per method.
+  Returns `handle` unchanged when tracing is disabled.
   """
   def prepend(handle, span) when is_list(handle) do
     if enabled?() do
-      [CaddyConfig.tracing(span: span) | handle]
+      [CaddyConfig.tracing(span: span, span_attributes: %{"http.route" => span}) | handle]
     else
       handle
     end
