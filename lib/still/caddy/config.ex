@@ -155,12 +155,44 @@ defmodule Still.Caddy.Config do
   @doc """
   Builds a `tracing` handler map. Caddy opens a span named `span` for the
   request and propagates W3C `traceparent` to the upstream, so an
-  instrumented application's own trace nests under it. Where spans are
-  exported is configured with the standard `OTEL_*` environment variables
-  on the Caddy process, not here.
+  instrumented application's own trace nests under it. `:span_attributes`
+  adds fixed attributes to every span; values must not contain `{` or `}`,
+  since Caddy expands placeholders in them. Where spans are exported is
+  configured with the standard `OTEL_*` environment variables on the Caddy
+  process, not here.
   """
-  def tracing(span: span) when is_binary(span) and span != "" do
+  def tracing(opts) when is_list(opts) do
+    span = Keyword.fetch!(opts, :span)
+    attrs = Keyword.get(opts, :span_attributes)
+
+    unless is_binary(span) and span != "" do
+      raise ArgumentError, "tracing :span must be a non-empty string"
+    end
+
     %{"handler" => "tracing", "span" => span}
+    |> maybe_put("span_attributes", span_attributes!(attrs))
+  end
+
+  defp span_attributes!(nil), do: nil
+
+  defp span_attributes!(%{} = attrs) when map_size(attrs) > 0 do
+    Enum.each(attrs, fn {key, value} ->
+      unless is_binary(key) and key != "" and is_binary(value) and value != "" do
+        raise ArgumentError, "tracing :span_attributes must be a map of non-empty strings"
+      end
+
+      if String.contains?(value, ["{", "}"]) do
+        raise ArgumentError,
+              "tracing :span_attributes values must not contain Caddy placeholder braces: #{inspect(value)}"
+      end
+    end)
+
+    attrs
+  end
+
+  defp span_attributes!(other) do
+    raise ArgumentError,
+          "tracing :span_attributes must be a non-empty map, got: #{inspect(other)}"
   end
 
   @doc """

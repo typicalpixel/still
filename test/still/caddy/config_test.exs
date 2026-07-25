@@ -197,11 +197,51 @@ defmodule Still.Caddy.ConfigTest do
     end
 
     test "rejects a blank span" do
-      assert_raise FunctionClauseError, fn -> Config.tracing(span: "") end
+      assert_raise ArgumentError, fn -> Config.tracing(span: "") end
     end
 
     test "rejects a non-binary span" do
-      assert_raise FunctionClauseError, fn -> Config.tracing(span: :api) end
+      assert_raise ArgumentError, fn -> Config.tracing(span: :api) end
+    end
+
+    test "requires :span" do
+      assert_raise KeyError, fn -> Config.tracing(span_attributes: %{"http.route" => "x"}) end
+    end
+
+    test "emits span_attributes when given" do
+      assert Config.tracing(span: "my-api", span_attributes: %{"http.route" => "my-api"}) ==
+               %{
+                 "handler" => "tracing",
+                 "span" => "my-api",
+                 "span_attributes" => %{"http.route" => "my-api"}
+               }
+    end
+
+    test "accepts options in any order" do
+      assert Config.tracing(span_attributes: %{"http.route" => "my-api"}, span: "my-api") ==
+               Config.tracing(span: "my-api", span_attributes: %{"http.route" => "my-api"})
+    end
+
+    test "rejects an empty span_attributes map" do
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{})
+      end
+    end
+
+    test "rejects non-string span_attributes entries" do
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{"http.route" => 42})
+      end
+
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{route: "my-api"})
+      end
+    end
+
+    test "rejects span_attributes values containing Caddy placeholder braces" do
+      assert_raise ArgumentError, fn ->
+        Config.tracing(span: "my-api", span_attributes: %{"http.route" => "{http.request.uri}"})
+      end
     end
   end
 

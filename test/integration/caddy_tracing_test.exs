@@ -50,8 +50,14 @@ defmodule Still.Integration.CaddyTracingTest do
       start_supervised!(DeploymentManager)
       assert {:ok, _} = DeploymentManager.deploy(spec("shape-app", "shape.example.test"))
 
-      assert [%{"handler" => "tracing", "span" => "shape-app"} | _] =
-               live_route("still_app_shape-app")["handle"]
+      assert [
+               %{
+                 "handler" => "tracing",
+                 "span" => "shape-app",
+                 "span_attributes" => %{"http.route" => "shape-app"}
+               }
+               | _
+             ] = live_route("still_app_shape-app")["handle"]
     end
   end
 
