@@ -153,6 +153,17 @@ defmodule Still.Caddy.Config do
   end
 
   @doc """
+  Builds a `tracing` handler map. Caddy opens a span named `span` for the
+  request and propagates W3C `traceparent` to the upstream, so an
+  instrumented application's own trace nests under it. Where spans are
+  exported is configured with the standard `OTEL_*` environment variables
+  on the Caddy process, not here.
+  """
+  def tracing(span: span) when is_binary(span) and span != "" do
+    %{"handler" => "tracing", "span" => span}
+  end
+
+  @doc """
   Builds a `file_server` handler map. The filesystem root is typically
   set by a preceding `vars/1` handler in the same subroute so that the
   request's file matcher and the file_server share a root.

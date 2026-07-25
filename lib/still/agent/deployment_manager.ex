@@ -41,6 +41,7 @@ defmodule Still.Agent.DeploymentManager do
   alias Still.Agent.StatePersistence
   alias Still.Agent.Systemd
   alias Still.Caddy.Config, as: CaddyConfig
+  alias Still.Caddy.Tracing
   alias Still.CaddyBootstrap
 
   @doc """
@@ -641,12 +642,15 @@ defmodule Still.Agent.DeploymentManager do
   blue/green port; `:static_site` gets a `subroute` that serves files
   from the active release dir with a `try_files → /index.html` fallback
   so SPA deep links don't 404.
+
+  With `caddy_tracing` enabled the handle is preceded by a `tracing`
+  handler named after the application.
   """
   def build_app_route(ctx) when is_map(ctx) do
     CaddyConfig.route(
       id: "still_app_#{ctx.spec.application}",
       match: [match_for(ctx)],
-      handle: handle_for(ctx),
+      handle: Tracing.prepend(handle_for(ctx), ctx.spec.application),
       terminal: true
     )
   end

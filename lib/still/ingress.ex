@@ -24,6 +24,7 @@ defmodule Still.Ingress do
   """
 
   alias Still.Caddy.Config, as: CaddyConfig
+  alias Still.Caddy.Tracing
 
   @id_prefix "still_ingress_"
 
@@ -59,6 +60,9 @@ defmodule Still.Ingress do
     * `terminal` — true, so one matched ingress route stops
       evaluation.
 
+  With `caddy_tracing` enabled the handle is preceded by a `tracing`
+  handler named after the application.
+
   Applications with an empty server list are skipped. The caller is
   expected to pre-filter via `Applications.list_routes/0` (which
   already omits unassigned apps), but the guard is here for safety
@@ -77,7 +81,7 @@ defmodule Still.Ingress do
     CaddyConfig.route(
       id: @id_prefix <> app.name,
       match: [build_match(app)],
-      handle: build_handle(app, servers),
+      handle: Tracing.prepend(build_handle(app, servers), app.name),
       terminal: true
     )
   end

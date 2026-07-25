@@ -45,6 +45,20 @@
 #   STILL_INGRESS_EDGE_PORT    controller only. Port the controller's ingress
 #                              Caddy dials on each agent (default: 8080).
 #                              Must match the agents' STILL_CADDY_HTTP_PORT.
+#   STILL_CADDY_TRACING        1 to turn on OpenTelemetry request tracing for
+#                              this node's applications, 0 to turn it off.
+#                              Unset leaves whatever's already configured
+#                              alone, so an upgrade never silently changes it.
+#                              On a fresh interactive install the installer
+#                              offers this only when it finds an OTLP
+#                              collector listening locally. Equivalent to
+#                              running `bin/tracing on|off` afterwards. Not
+#                              applied under STILL_SKIP_CADDY_SETUP=1 (it
+#                              writes a caddy.service drop-in) — the installer
+#                              warns and leaves it to you.
+#   STILL_OTLP_ENDPOINT        collector the node's Caddy exports spans to
+#                              (default http://127.0.0.1:4318). Base URL —
+#                              /v1/traces is appended by the exporter.
 #   STILL_SKIP_CADDY_SETUP     set to 1 if you manage Caddy yourself: the
 #                              installer then won't reconcile Caddy's base
 #                              config or touch caddy.service. Ensure your
@@ -143,6 +157,12 @@ if [ -f "$STILL_ETC/installed-version" ] \
    || { [ -f "$STILL_ETC/server.id" ] && [ -x "$STILL_PREFIX/bin/still" ]; }; then
   STILL_UPGRADE=1
 fi
+
+# Captured before the upgrade path sources still.env.local below: the stored
+# STILL_CADDY_TRACING would otherwise shadow a value the operator passed on
+# this run, making it impossible to turn tracing off from the command line.
+# Empty means "leave tracing however it's already configured".
+STILL_CADDY_TRACING_REQUESTED="${STILL_CADDY_TRACING:-}"
 
 if [ "${STILL_UPGRADE:-}" = "1" ]; then
   set -a
@@ -253,6 +273,27 @@ if [ "${STILL_MODE:-}" != "agent" ] && [ "${STILL_UPGRADE:-}" != "1" ] && [ -z "
   printf "[off]: " > /dev/tty
   read -r STILL_CONTROLLER_TLS < /dev/tty
   STILL_CONTROLLER_TLS="${STILL_CONTROLLER_TLS:-off}"
+fi
+
+# All modes: request tracing. Only offered when something is already listening
+# on the OTLP endpoint — an operator with no collector shouldn't have to answer
+# a question about OpenTelemetry to install Still. Skipped on upgrade; the
+# answer lives in still.env.local and `bin/tracing on|off` changes it later.
+if [ "${STILL_UPGRADE:-}" != "1" ] && [ -z "${STILL_CADDY_TRACING+x}" ] \
+  && [ -z "${STILL_SKIP_CADDY_SETUP:-}" ] && can_prompt \
+  && curl -sS -m 2 --noproxy '*' -o /dev/null "${STILL_OTLP_ENDPOINT:-http://127.0.0.1:4318}/v1/traces" 2>/dev/null; then
+  printf "\nRequest tracing — found an OTLP collector at %s.\n" \
+    "${STILL_OTLP_ENDPOINT:-http://127.0.0.1:4318}" > /dev/tty
+  printf "Caddy can emit one span per proxied request, named after the\n" > /dev/tty
+  printf "application, and pass the trace context to it so the app's own\n" > /dev/tty
+  printf "traces nest underneath. Still's dashboard is never traced.\n" > /dev/tty
+  printf "Enable request tracing? [y/N]: " > /dev/tty
+  read -r _tracing_answer < /dev/tty
+
+  case "$_tracing_answer" in
+    y | Y | yes | YES) STILL_CADDY_TRACING_REQUESTED=1 ;;
+    *) STILL_CADDY_TRACING_REQUESTED=0 ;;
+  esac
 fi
 
 # All modes: node host
@@ -689,8 +730,31 @@ EOF
   else
     warn "No caddy.service unit found — ensure your Caddy starts with 'caddy run --resume' so Still's routes survive a Caddy restart."
   fi
+
+  # Request tracing. Unset means "leave it as it is", so an upgrade never
+  # flips it either way. bin/tracing owns both halves (the STILL_CADDY_TRACING
+  # flag in still.env.local and caddy.service's exporter drop-in) so the
+  # installer and a later `bin/tracing on` can't drift apart.
+  # SKIP_STILL_RESTART: the installer restarts still.service itself at the end
+  # of the run, after the pre-upgrade DB backup and migrations — a restart here
+  # would boot the new release (which migrates on boot) ahead of both.
+  case "$STILL_CADDY_TRACING_REQUESTED" in
+    1 | true)
+      say "Enabling request tracing (bin/tracing on)"
+      STILL_TRACING_SKIP_STILL_RESTART=1 "$STILL_PREFIX/bin/tracing" on ||
+        warn "request tracing setup failed — finish with: $STILL_PREFIX/bin/tracing on"
+      ;;
+    0 | false)
+      STILL_TRACING_SKIP_STILL_RESTART=1 "$STILL_PREFIX/bin/tracing" off ||
+        warn "request tracing teardown failed — finish with: $STILL_PREFIX/bin/tracing off"
+      ;;
+  esac
 else
   say "Skipping Caddy base config (STILL_SKIP_CADDY_SETUP is set)"
+
+  if [ -n "$STILL_CADDY_TRACING_REQUESTED" ]; then
+    warn "STILL_CADDY_TRACING is not applied when STILL_SKIP_CADDY_SETUP is set — it writes a caddy.service drop-in. Run $STILL_PREFIX/bin/tracing on|off yourself if you want that."
+  fi
 fi
 
 # -----------------------------------------------------------------------------

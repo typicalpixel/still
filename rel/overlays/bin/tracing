@@ -1,0 +1,345 @@
+#!/bin/sh
+set -eu
+
+# Turn Caddy request tracing on or off on this node.
+#
+#   still-prefix/bin/tracing on      # start tracing; restarts caddy if needed
+#   still-prefix/bin/tracing off     # stop tracing
+#   still-prefix/bin/tracing status  # what's configured, and is anything listening
+#
+# Two halves have to agree, and this owns both:
+#
+#   * STILL_CADDY_TRACING in still.env.local — makes Still emit the tracing
+#     handler on the per-application routes it writes.
+#   * a systemd drop-in on caddy.service — points Caddy's OTLP exporter at a
+#     collector. Caddy reads OTEL_* at startup, so changing it needs a restart.
+#
+# Deliberately no BEAM: this is file writes and systemctl, so it works even
+# when the release won't boot. install.sh calls it too, so there's one
+# implementation.
+#
+# Overrides (also read from still.env / still.env.local):
+#   STILL_OTLP_ENDPOINT       default http://127.0.0.1:4318. Base URL — the
+#                             exporter appends /v1/traces itself. Prefer the
+#                             literal 127.0.0.1 over localhost, which can
+#                             resolve to ::1 and miss an IPv4-only receiver.
+#   STILL_OTLP_PROTOCOL       default http/protobuf. Caddy's own default is
+#                             grpc on :4317; most collectors only open the
+#                             HTTP receiver on :4318.
+#   STILL_OTLP_SERVICE_NAME   defaults to caddy-ingress in controller mode and
+#                             caddy otherwise, so a multi-node trace's two
+#                             proxy hops read apart. Override for anything
+#                             else; the value is recorded, so it survives.
+#   STILL_OTLP_RESOURCE_ATTRIBUTES
+#                             optional comma-separated OpenTelemetry resource
+#                             attributes for Caddy's spans, e.g.
+#                             deployment.environment=production. Unset by
+#                             default: most collectors already stamp what they
+#                             know (environment, host) onto what they receive,
+#                             so only set this when yours doesn't.
+#   STILL_ETC                 default /etc/still
+#   STILL_TRACING_DROPIN      default /etc/systemd/system/caddy.service.d/still-tracing.conf
+#   STILL_TRACING_SKIP_STILL_RESTART
+#                             set to 1 to leave still.service alone even when
+#                             the flag changed. install.sh sets this: it
+#                             restarts still.service itself at the end of the
+#                             run, after the pre-upgrade DB backup and
+#                             migrations — a restart here would boot the new
+#                             release (which migrates on boot) ahead of both.
+#
+# Values are written unquoted into still.env.local (sh-sourced AND read by
+# systemd EnvironmentFile), so they must not contain whitespace or quotes;
+# the script refuses them rather than truncating silently.
+
+# still.env.local carries SECRET_KEY_BASE and RELEASE_COOKIE, so nothing this
+# script writes beside it may be world-readable, even transiently. The caddy
+# drop-in is chmod'd 0644 explicitly; its directory 0755.
+umask 077
+tmp=""
+trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp"; exit 1' INT TERM HUP
+
+# Caller-supplied values win over anything the env files carry.
+caller_endpoint="${STILL_OTLP_ENDPOINT:-}"
+caller_protocol="${STILL_OTLP_PROTOCOL:-}"
+caller_service="${STILL_OTLP_SERVICE_NAME:-}"
+caller_attributes="${STILL_OTLP_RESOURCE_ATTRIBUTES:-}"
+skip_still_restart="${STILL_TRACING_SKIP_STILL_RESTART:-0}"
+
+ETC="${STILL_ETC:-/etc/still}"
+env_local="$ETC/still.env.local"
+
+# Sourced independently: still.env.local carries this node's tracing settings
+# and must be read even on a node with no still.env.
+set -a
+if [ -f "$ETC/still.env" ]; then
+  . "$ETC/still.env"
+fi
+if [ -f "$env_local" ]; then
+  . "$env_local"
+fi
+set +a
+
+[ -n "$caller_endpoint" ] && STILL_OTLP_ENDPOINT="$caller_endpoint"
+[ -n "$caller_protocol" ] && STILL_OTLP_PROTOCOL="$caller_protocol"
+[ -n "$caller_service" ] && STILL_OTLP_SERVICE_NAME="$caller_service"
+[ -n "$caller_attributes" ] && STILL_OTLP_RESOURCE_ATTRIBUTES="$caller_attributes"
+
+endpoint="${STILL_OTLP_ENDPOINT:-http://127.0.0.1:4318}"
+protocol="${STILL_OTLP_PROTOCOL:-http/protobuf}"
+
+# A controller's Caddy only fronts ingress to agents; an agent's — or a
+# standalone's — serves the application itself. Naming them apart makes the two
+# proxy hops of a multi-node trace legible as services rather than only by host
+# tag. Which node a span came from is a host concern, so keep hostnames out of
+# this: one service per role, not per machine.
+case "${STILL_MODE:-}" in
+  controller) default_service_name="caddy-ingress" ;;
+  *) default_service_name="caddy" ;;
+esac
+
+service_name="${STILL_OTLP_SERVICE_NAME:-$default_service_name}"
+resource_attributes="${STILL_OTLP_RESOURCE_ATTRIBUTES:-}"
+dropin="${STILL_TRACING_DROPIN:-/etc/systemd/system/caddy.service.d/still-tracing.conf}"
+
+say() { echo "==> $*"; }
+warn() { echo "warning: $*" >&2; }
+
+# Rewrites `key=value` in still.env.local, dropping any existing line for the
+# key first so repeated runs don't stack duplicates. Returns 0 when the file
+# changed.
+put_env_local() {
+  key="$1"
+  value="$2"
+
+  case "$value" in
+    *[!A-Za-z0-9_.,:/=+@-]*)
+      echo "error: $key must not contain whitespace, quotes, or shell metacharacters: $value" >&2
+      exit 65
+      ;;
+  esac
+
+  mkdir -p "$(dirname "$env_local")"
+  touch "$env_local"
+
+  if [ "$(grep "^${key}=" "$env_local" || true)" = "${key}=${value}" ]; then
+    return 1
+  fi
+
+  tmp="$env_local.tmp.$$"
+  grep -v "^${key}=" "$env_local" > "$tmp" || true
+  echo "${key}=${value}" >> "$tmp"
+  cat "$tmp" > "$env_local"
+  rm -f "$tmp"
+  return 0
+}
+
+# Returns 0 when the file changed.
+drop_env_local() {
+  key="$1"
+  [ -f "$env_local" ] || return 1
+  grep -q "^${key}=" "$env_local" || return 1
+
+  tmp="$env_local.tmp.$$"
+  grep -v "^${key}=" "$env_local" > "$tmp" || true
+  cat "$tmp" > "$env_local"
+  rm -f "$tmp"
+  return 0
+}
+
+# Returns 0 when the drop-in changed.
+write_dropin() {
+  mkdir -p "$(dirname "$dropin")"
+  chmod 0755 "$(dirname "$dropin")"
+  tmp="$dropin.tmp.$$"
+
+  cat > "$tmp" <<EOF
+# Managed by Still — see \`bin/tracing\`. Caddy's OTLP exporter is configured
+# from these standard OpenTelemetry variables, read once at startup, so a
+# change here needs a caddy restart to take effect.
+[Service]
+Environment=OTEL_EXPORTER_OTLP_PROTOCOL=$protocol
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=$endpoint
+Environment=OTEL_SERVICE_NAME=$service_name
+EOF
+
+  if [ -n "$resource_attributes" ]; then
+    echo "Environment=OTEL_RESOURCE_ATTRIBUTES=$resource_attributes" >> "$tmp"
+  fi
+
+  if [ -f "$dropin" ] && cmp -s "$tmp" "$dropin"; then
+    rm -f "$tmp"
+    return 1
+  fi
+
+  cat "$tmp" > "$dropin"
+  rm -f "$tmp"
+  chmod 0644 "$dropin"
+  return 0
+}
+
+# Returns 0 when the drop-in was there to remove.
+remove_dropin() {
+  [ -f "$dropin" ] || return 1
+  rm -f "$dropin"
+  return 0
+}
+
+unit_active() {
+  systemctl is-active --quiet "$1" 2>/dev/null
+}
+
+restart_if_active() {
+  unit="$1"
+  reason="$2"
+
+  if unit_active "$unit"; then
+    say "Restarting $unit ($reason)"
+    if ! systemctl restart "$unit"; then
+      warn "restart of $unit failed — the config is written; finish with: systemctl restart $unit"
+    fi
+  fi
+  return 0
+}
+
+# Caddy only honours OTEL_EXPORTER_OTLP_PROTOCOL from v2.11.0 — 2.9 and 2.10
+# hardcode the gRPC exporter, so an http/protobuf drop-in there sends gRPC at
+# an HTTP receiver and every span is silently dropped.
+caddy_honours_protocol() {
+  [ "$protocol" = "http/protobuf" ] || return 0
+  command -v caddy >/dev/null 2>&1 || return 0
+
+  set -- $(caddy version 2>/dev/null | head -n1 |
+    sed -nE 's/^v?([0-9]+)\.([0-9]+).*/\1 \2/p')
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] || return 0
+
+  [ "$1" -gt 2 ] 2>/dev/null && return 0
+  [ "$1" -eq 2 ] 2>/dev/null && [ "$2" -ge 11 ] 2>/dev/null && return 0
+  return 1
+}
+
+warn_if_protocol_ignored() {
+  caddy_honours_protocol ||
+    warn "this Caddy ($(caddy version | head -n1)) predates v2.11.0 and ignores OTEL_EXPORTER_OTLP_PROTOCOL: it will export over gRPC and an HTTP-only collector drops every span. Upgrade Caddy to >= 2.11, or set STILL_OTLP_PROTOCOL=grpc with a :4317 endpoint and enable your collector's gRPC receiver."
+}
+
+collector_reachable() {
+  command -v curl >/dev/null 2>&1 || return 1
+  # Any HTTP answer proves something is listening; an OTLP receiver replies
+  # 405 to a GET, which is fine — we only care that the connection lands.
+  # --noproxy '*' keeps an inherited http_proxy from answering for a dead
+  # loopback endpoint.
+  curl -sS -m 2 --noproxy '*' -o /dev/null "$endpoint/v1/traces" 2>/dev/null
+}
+
+cmd_on() {
+  flag_changed=0
+  dropin_changed=0
+
+  put_env_local STILL_CADDY_TRACING 1 && flag_changed=1
+
+  # All three are recorded, not just the flag: still.env.local is the record of
+  # what this node's exporter should look like, so a later `tracing on` — or an
+  # install.sh run — rebuilds the same drop-in instead of quietly reverting a
+  # customised endpoint, protocol, or service name to the default.
+  put_env_local STILL_OTLP_ENDPOINT "$endpoint" || true
+  put_env_local STILL_OTLP_PROTOCOL "$protocol" || true
+  put_env_local STILL_OTLP_SERVICE_NAME "$service_name" || true
+
+  if [ -n "$resource_attributes" ]; then
+    put_env_local STILL_OTLP_RESOURCE_ATTRIBUTES "$resource_attributes" || true
+  fi
+
+  write_dropin && dropin_changed=1
+
+  if [ "$dropin_changed" = 1 ]; then
+    systemctl daemon-reload
+    say "Wrote $dropin"
+  fi
+
+  if [ "$flag_changed" = 0 ] && [ "$dropin_changed" = 0 ]; then
+    say "Tracing already on — nothing to change"
+    return 0
+  fi
+
+  if [ "$flag_changed" = 1 ] && [ "$skip_still_restart" != 1 ]; then
+    restart_if_active still.service "picks up STILL_CADDY_TRACING"
+  fi
+
+  if [ "$dropin_changed" = 1 ]; then
+    if unit_active caddy.service; then
+      say "Caddy needs a restart to read the exporter environment — brief ingress blip"
+      restart_if_active caddy.service "reads OTEL_* from the drop-in"
+    else
+      warn "caddy.service isn't running; it will pick up the exporter environment when it starts."
+    fi
+  fi
+
+  warn_if_protocol_ignored
+
+  collector_reachable ||
+    warn "nothing answered at $endpoint — spans will be dropped until a collector listens there."
+
+  say "Tracing on. Application routes carry a span named after the application."
+  say "Already-deployed applications keep their current routes until the next deploy — see the README."
+}
+
+cmd_off() {
+  flag_changed=0
+  dropin_changed=0
+
+  drop_env_local STILL_CADDY_TRACING && flag_changed=1
+  remove_dropin && dropin_changed=1
+
+  if [ "$flag_changed" = 0 ] && [ "$dropin_changed" = 0 ]; then
+    say "Tracing already off — nothing to change"
+    return 0
+  fi
+
+  [ "$dropin_changed" = 1 ] && systemctl daemon-reload
+
+  if [ "$flag_changed" = 1 ] && [ "$skip_still_restart" != 1 ]; then
+    restart_if_active still.service "picks up STILL_CADDY_TRACING"
+  fi
+
+  [ "$dropin_changed" = 1 ] && restart_if_active caddy.service "drops the exporter environment"
+
+  say "Tracing off. Routes stop carrying the handler as they're rewritten."
+}
+
+cmd_status() {
+  # The env files were sourced above, so this mirrors what Still itself sees
+  # (runtime.exs accepts "1" or "true", from either env file).
+  case "${STILL_CADDY_TRACING:-}" in
+    1 | true) echo "tracing:  on" ;;
+    *) echo "tracing:  off" ;;
+  esac
+
+  echo "endpoint: $endpoint"
+  echo "protocol: $protocol"
+  echo "service:  $service_name"
+
+  if [ -f "$dropin" ]; then
+    echo "drop-in:  $dropin (present)"
+  else
+    echo "drop-in:  $dropin (absent)"
+  fi
+
+  warn_if_protocol_ignored
+
+  if collector_reachable; then
+    echo "collector: reachable"
+  else
+    echo "collector: NOT reachable at $endpoint"
+  fi
+}
+
+case "${1:-}" in
+  on) cmd_on ;;
+  off) cmd_off ;;
+  status) cmd_status ;;
+  *)
+    echo "usage: tracing on|off|status" >&2
+    exit 64
+    ;;
+esac

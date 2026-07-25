@@ -29,6 +29,11 @@ defmodule Still.IntegrationCase do
       config for the module's duration)
     * `context.applications_dir` — per-module temp directory set as
       Still's `:applications_dir`
+
+  `use Still.IntegrationCase, otlp: true` additionally starts a
+  `Still.RecordingServer` as an OTLP collector and boots Caddy with the
+  `OTEL_*` environment Still's README prescribes, pointed at it. The
+  collector arrives as `context.otlp`.
   """
 
   use ExUnit.CaseTemplate
@@ -37,6 +42,7 @@ defmodule Still.IntegrationCase do
 
   using opts do
     require_root = Keyword.get(opts, :root, false)
+    otlp = Keyword.get(opts, :otlp, false)
     tag = if require_root, do: :integration_root, else: :integration
 
     quote do
@@ -45,7 +51,10 @@ defmodule Still.IntegrationCase do
       import Still.IntegrationCase
 
       setup_all do
-        Still.IntegrationCase.setup_integration(require_root: unquote(require_root))
+        Still.IntegrationCase.setup_integration(
+          require_root: unquote(require_root),
+          otlp: unquote(otlp)
+        )
       end
     end
   end
@@ -63,7 +72,7 @@ defmodule Still.IntegrationCase do
   def setup_integration(opts) do
     with :ok <- check_root(opts),
          :ok <- check_executables() do
-      boot_test_environment()
+      boot_test_environment(Keyword.get(opts, :otlp, false))
     end
   end
 
@@ -82,20 +91,22 @@ defmodule Still.IntegrationCase do
     end
   end
 
-  defp boot_test_environment do
+  defp boot_test_environment(otlp?) do
     artifacts_dir = fresh_artifacts_dir()
-    caddy = start_caddy!(artifacts_dir: artifacts_dir)
+    otlp = if otlp?, do: Still.RecordingServer.start!()
+    caddy = start_caddy!(artifacts_dir: artifacts_dir, otlp_endpoint: otlp && otlp.endpoint)
     apps_dir = fresh_applications_dir()
     original = override_env!(caddy, apps_dir, artifacts_dir)
 
     ExUnit.Callbacks.on_exit(fn ->
       stop_caddy!(caddy)
+      if otlp, do: Still.RecordingServer.stop!(otlp)
       File.rm_rf!(apps_dir)
       File.rm_rf!(artifacts_dir)
       restore_env!(original)
     end)
 
-    {:ok, caddy: caddy, applications_dir: apps_dir, artifacts_dir: artifacts_dir}
+    {:ok, caddy: caddy, otlp: otlp, applications_dir: apps_dir, artifacts_dir: artifacts_dir}
   end
 
   defp running_as_root? do
@@ -172,11 +183,12 @@ defmodule Still.IntegrationCase do
           :binary,
           :exit_status,
           args: ["run", "--config", config_file],
-          env: [
-            {~c"XDG_CONFIG_HOME", home},
-            {~c"XDG_DATA_HOME", home},
-            {~c"XDG_CACHE_HOME", home}
-          ]
+          env:
+            [
+              {~c"XDG_CONFIG_HOME", home},
+              {~c"XDG_DATA_HOME", home},
+              {~c"XDG_CACHE_HOME", home}
+            ] ++ otel_env(Keyword.get(opts, :otlp_endpoint))
         ]
       )
 
@@ -196,6 +208,21 @@ defmodule Still.IntegrationCase do
       config_file: config_file,
       caddy_home: caddy_home
     }
+  end
+
+  # The exporter environment Still's README tells operators to put on
+  # caddy.service, so the integration tests prove the documented setup rather
+  # than a test-only variant. The batch delay is the one addition: the OTLP
+  # SDK's 5s default would make every span assertion wait it out.
+  defp otel_env(nil), do: []
+
+  defp otel_env(endpoint) do
+    [
+      {~c"OTEL_EXPORTER_OTLP_PROTOCOL", ~c"http/protobuf"},
+      {~c"OTEL_EXPORTER_OTLP_ENDPOINT", String.to_charlist(endpoint)},
+      {~c"OTEL_SERVICE_NAME", ~c"caddy"},
+      {~c"OTEL_BSP_SCHEDULE_DELAY", ~c"200"}
+    ]
   end
 
   @doc """

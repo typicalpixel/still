@@ -16,6 +16,7 @@ config :still,
   artifact_base_url: "http://localhost:9090",
   artifact_retention: 10,
   caddy_admin_url: "http://localhost:2019",
+  caddy_tracing: false,
   caddy_req_options: [],
   health_req_options: [retry: false],
   artifact_req_options: []
