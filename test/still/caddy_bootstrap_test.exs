@@ -216,6 +216,12 @@ defmodule Still.CaddyBootstrapTest do
       assert [%{"handler" => "reverse_proxy", "upstreams" => [%{"dial" => "localhost:4000"}]}] =
                route["handle"]
     end
+
+    # Still's own dashboard/API traffic stays out of application traces —
+    # Still.Caddy.TracingTest pins that it isn't traced with tracing enabled.
+    test "carries no tracing handler", %{route: route} do
+      assert Enum.map(route["handle"], & &1["handler"]) == ["reverse_proxy"]
+    end
   end
 
   describe "rebuild/2 — catch-all route shape" do

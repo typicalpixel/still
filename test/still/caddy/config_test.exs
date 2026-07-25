@@ -191,6 +191,20 @@ defmodule Still.Caddy.ConfigTest do
     end
   end
 
+  describe "tracing/1" do
+    test "returns the handler map with the given span name" do
+      assert Config.tracing(span: "my-api") == %{"handler" => "tracing", "span" => "my-api"}
+    end
+
+    test "rejects a blank span" do
+      assert_raise FunctionClauseError, fn -> Config.tracing(span: "") end
+    end
+
+    test "rejects a non-binary span" do
+      assert_raise FunctionClauseError, fn -> Config.tracing(span: :api) end
+    end
+  end
+
   describe "file_server/0, vars/1, rewrite/1, subroute/1" do
     test "file_server returns the bare handler map" do
       assert Config.file_server() == %{"handler" => "file_server"}

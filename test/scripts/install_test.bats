@@ -96,6 +96,10 @@ STUB
 echo "bootstrap" >> "$STUB_LOG/bootstrap.log"
 STUB
 
+  # The real overlay script, not a stub — install.sh delegates the whole
+  # tracing toggle to it, so these tests cover both together.
+  cp "${BATS_TEST_DIRNAME}/../../rel/overlays/bin/tracing" "$FAKE_RELEASE/bin/tracing"
+
   chmod +x "$FAKE_RELEASE/bin"/*
 
   FAKE_TARBALL="$TEST_DIR/still.tar.gz"
@@ -686,6 +690,161 @@ STUB
   run sh "$INSTALL_SH"
   [ "$status" -eq 0 ]
   [ -d "$STILL_VAR/artifacts" ]
+}
+
+# =====================================================================
+# Request tracing
+# =====================================================================
+
+# The tracing toggle lives inside the Caddy setup block (it writes a
+# caddy.service drop-in), which these tests skip by default.
+enable_caddy_setup() {
+  unset STILL_SKIP_CADDY_SETUP
+  export STILL_CADDY_DROPIN="$TEST_DIR/caddy-dropin.conf"
+  export STILL_TRACING_DROPIN="$TEST_DIR/caddy-tracing.conf"
+}
+
+@test "tracing: off by default — no drop-in, no flag" {
+  enable_caddy_setup
+
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  [ ! -f "$STILL_TRACING_DROPIN" ]
+  ! grep -q 'STILL_CADDY_TRACING' "$STILL_ETC/still.env.local"
+}
+
+@test "tracing: STILL_CADDY_TRACING=1 writes the exporter drop-in and the flag" {
+  enable_caddy_setup
+  export STILL_CADDY_TRACING=1
+
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  # The three variables Caddy's OTLP exporter reads. http/protobuf is not the
+  # SDK default (grpc on :4317 is), so it has to be explicit.
+  grep -q '^Environment=OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf$' "$STILL_TRACING_DROPIN"
+  grep -q '^Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318$' "$STILL_TRACING_DROPIN"
+  grep -q '^Environment=OTEL_SERVICE_NAME=caddy$' "$STILL_TRACING_DROPIN"
+
+  # The flag lives in still.env.local, which is preserved across upgrades —
+  # still.env is rewritten every install and would silently drop it.
+  grep -q '^STILL_CADDY_TRACING=1$' "$STILL_ETC/still.env.local"
+
+  grep -q 'daemon-reload' "$STUB_LOG/systemctl.log"
+}
+
+@test "tracing: a controller install names its Caddy caddy-ingress" {
+  # bin/tracing derives the service name from STILL_MODE (which it sees both
+  # via the exported env and via the still.env the installer writes first).
+  enable_caddy_setup
+  export STILL_MODE=controller
+  export STILL_CADDY_TRACING=1
+
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  grep -q '^Environment=OTEL_SERVICE_NAME=caddy-ingress$' "$STILL_TRACING_DROPIN"
+}
+
+@test "tracing: a standalone install names its Caddy caddy" {
+  enable_caddy_setup
+  export STILL_CADDY_TRACING=1
+
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  grep -q '^Environment=OTEL_SERVICE_NAME=caddy$' "$STILL_TRACING_DROPIN"
+}
+
+@test "tracing: honors a custom STILL_OTLP_ENDPOINT and persists it" {
+  enable_caddy_setup
+  export STILL_CADDY_TRACING=1
+  export STILL_OTLP_ENDPOINT=http://10.0.0.9:4318
+
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  grep -q '^Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://10.0.0.9:4318$' "$STILL_TRACING_DROPIN"
+  grep -q '^STILL_OTLP_ENDPOINT=http://10.0.0.9:4318$' "$STILL_ETC/still.env.local"
+}
+
+# Re-running the installer at the same version exits early by design, so an
+# upgrade has to be staged with an older installed-version marker or these
+# tests would pass without the second run doing anything.
+stage_upgrade_from() {
+  echo "$1" > "$STILL_ETC/installed-version"
+  export STILL_ASSUME_YES=1
+}
+
+@test "tracing: STILL_CADDY_TRACING=0 removes an existing setup" {
+  enable_caddy_setup
+  export STILL_CADDY_TRACING=1
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+  [ -f "$STILL_TRACING_DROPIN" ]
+
+  stage_upgrade_from v0.1.0
+  export STILL_CADDY_TRACING=0
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Upgrade: v0.1.0 -> v0.2.0"* ]]
+
+  [ ! -f "$STILL_TRACING_DROPIN" ]
+  ! grep -q '^STILL_CADDY_TRACING=1$' "$STILL_ETC/still.env.local"
+}
+
+@test "tracing: an upgrade with nothing set leaves tracing on" {
+  enable_caddy_setup
+  export STILL_CADDY_TRACING=1
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  # Upgrade exactly as an unattended run would: the variable isn't in the
+  # environment at all. Tracing must survive — still.env is rewritten on every
+  # install, which is why the flag lives in still.env.local.
+  stage_upgrade_from v0.1.0
+  unset STILL_CADDY_TRACING
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Upgrade: v0.1.0 -> v0.2.0"* ]]
+
+  [ -f "$STILL_TRACING_DROPIN" ]
+  grep -q '^STILL_CADDY_TRACING=1$' "$STILL_ETC/still.env.local"
+}
+
+@test "tracing: warns instead of silently dropping the flag under STILL_SKIP_CADDY_SETUP" {
+  # The suite's default env keeps STILL_SKIP_CADDY_SETUP=1. The tracing apply
+  # writes a caddy.service drop-in, which that flag promises not to touch — so
+  # the request must be loudly declined, not silently eaten.
+  export STILL_TRACING_DROPIN="$TEST_DIR/caddy-tracing.conf"
+  export STILL_CADDY_TRACING=1
+
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  [[ "$output" == *"STILL_CADDY_TRACING is not applied"* ]]
+  [ ! -f "$STILL_TRACING_DROPIN" ]
+  ! grep -q 'STILL_CADDY_TRACING' "$STILL_ETC/still.env.local"
+}
+
+@test "tracing: enabling during an upgrade restarts still.service once, after backup and migrations" {
+  # bin/tracing's own still.service restart is suppressed by the installer
+  # (STILL_TRACING_SKIP_STILL_RESTART): the new release migrates on boot, so a
+  # mid-install restart would make the "pre-upgrade" DB backup post-migration.
+  # The installer's unconditional restart at the end is the only one allowed.
+  enable_caddy_setup
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  stage_upgrade_from v0.1.0
+  export STILL_CADDY_TRACING=1
+  : > "$STUB_LOG/systemctl.log"
+  run sh "$INSTALL_SH"
+  [ "$status" -eq 0 ]
+
+  [ -f "$STILL_TRACING_DROPIN" ]
+  [ "$(grep -c 'restart still.service' "$STUB_LOG/systemctl.log")" -eq 1 ]
 }
 
 @test "caddy: registers a --resume drop-in so config survives a Caddy restart" {

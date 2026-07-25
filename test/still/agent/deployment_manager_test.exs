@@ -207,6 +207,14 @@ defmodule Still.Agent.DeploymentManagerTest do
              ] = DeploymentManager.build_app_route(ctx)["handle"]
     end
 
+    # Enabled-path coverage lives in Still.Caddy.TracingTest.
+    test "carries no tracing handler while caddy_tracing is off" do
+      ctx = %{spec: valid_spec(), target_port: 4_000}
+
+      assert Enum.map(DeploymentManager.build_app_route(ctx)["handle"], & &1["handler"]) ==
+               ["reverse_proxy"]
+    end
+
     test ":process uses the same reverse_proxy handle shape as :elixir_release" do
       ctx = %{
         spec: valid_spec(%{type: :process, domain: "worker.example.com"}),

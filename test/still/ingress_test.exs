@@ -67,6 +67,14 @@ defmodule Still.IngressTest do
       assert ids == ["still_ingress_api", "still_ingress_marketing"]
     end
 
+    # Enabled-path coverage lives in Still.Caddy.TracingTest, which flips the
+    # global knob and so can't be async.
+    test "carries no tracing handler while caddy_tracing is off" do
+      entries = [%{application: elixir_app(), servers: [server("10.0.0.3")]}]
+      [route] = Ingress.build_routes(entries)
+      assert [%{"handler" => "reverse_proxy"}] = route["handle"]
+    end
+
     test "route carries host matcher for the app domain" do
       entries = [%{application: elixir_app(%{domain: "api.test"}), servers: [server("10.0.0.3")]}]
       [route] = Ingress.build_routes(entries)

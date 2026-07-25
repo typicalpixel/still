@@ -28,5 +28,6 @@ lib/still/dev/standalone.ex ed8fd291
 lib/still/orchestrator.ex b451d0ad
 lib/still/orchestrator.ex execute_rolling_deploy 01165896
 lib/still/release.ex b61e7447
-test/support/integration_case.ex 8e3d1636
+test/support/integration_case.ex ba10ede1
 test/support/integration_fixtures.ex 7e5e5325
+test/support/recording_server.ex 0fcb583c

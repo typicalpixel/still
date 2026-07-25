@@ -78,6 +78,10 @@ config :still,
        :ingress_edge_port,
        String.to_integer(System.get_env("STILL_INGRESS_EDGE_PORT", "8080"))
 
+# Opt-in OpenTelemetry spans on the Caddy routes Still writes. Per node —
+# every mode reads it, since agents write their own application routes.
+config :still, :caddy_tracing, System.get_env("STILL_CADDY_TRACING") in ["1", "true"]
+
 # erlexec (console PTYs) refuses to start under a root BEAM without an
 # explicit opt-in. Still's agent runs as root, so opt in when we are root;
 # euid via /proc/self ownership since the USER env var may be absent under

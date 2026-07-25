@@ -423,6 +423,97 @@ curl -sS $STILL_URL/api/servers/<server-id>/caddy -H "Authorization: Bearer $TOK
 
 Or open the **Caddy** page in the dashboard (admins only) and pick a node from the dropdown.
 
+### Request tracing (OpenTelemetry)
+
+Off by default. When enabled, Still adds a `tracing` handler to the per-application
+Caddy routes it writes, so Caddy emits one OTLP span per proxied request and forwards
+a W3C `traceparent` header upstream. Spans are named after the application (`api`,
+`marketing`, …). Still's own dashboard and API are never traced, so operating Still stays
+out of your applications' traces — and they're absent from the dashboard's request
+metrics for the same reason.
+An application that runs its own OpenTelemetry instrumentation picks up that header
+and its trace nests under Caddy's — one trace covering the proxy hops, the request,
+and whatever the application instruments inside it (database queries, background
+work). Requests that never reach your application — a `502` from a dead upstream, a
+maintenance-mode `503` — still produce a span, which is telemetry you can't get from
+inside the application.
+
+Works with any OTLP collector: the OpenTelemetry Collector, Grafana Alloy, Jaeger,
+the Datadog agent. The default `http/protobuf` export needs **Caddy ≥ 2.11** —
+older Caddy (2.9/2.10) hardcodes the gRPC exporter and silently ignores the protocol
+variable, so spans would go out as gRPC and an HTTP-only collector drops them all.
+`bin/tracing` warns when it detects this; on older Caddy either upgrade, or set
+`STILL_OTLP_PROTOCOL=grpc` with a `:4317` endpoint and enable your collector's gRPC
+receiver.
+
+```sh
+sudo /opt/still/bin/tracing on       # or: off, status
+```
+
+That's the whole thing. It sets `STILL_CADDY_TRACING` in `/etc/still/still.env.local`
+so Still starts emitting the handler, writes the exporter environment Caddy needs to
+`/etc/systemd/system/caddy.service.d/still-tracing.conf`, and restarts Still and Caddy
+if either actually changed. Nothing to hand-write, and it's idempotent — run it twice
+and the second run reports that there's nothing to change. The Caddy restart is a
+brief ingress blip, which the command tells you before it does it.
+
+Run it on every node whose Caddy should trace. It's per node, so you can trace agents
+without tracing the controller, or the reverse; each Caddy exports to a collector
+reachable from its own box.
+
+`bin/tracing status` reports what's configured and, usefully, whether anything is
+actually listening at the endpoint — the failure people hit most:
+
+```
+tracing:  on
+endpoint: http://127.0.0.1:4318
+protocol: http/protobuf
+service:  caddy
+drop-in:  /etc/systemd/system/caddy.service.d/still-tracing.conf (present)
+collector: reachable
+```
+
+On a fresh install, `install.sh` offers to turn tracing on — but only if it finds a
+collector already listening locally, so an install with no collector never asks. Set
+`STILL_CADDY_TRACING=1` (or `0`) in the environment to decide non-interactively; left
+unset on an upgrade, it leaves whatever you already configured alone.
+
+Four knobs, all optional, read from the environment or `still.env.local`. `tracing on`
+records whatever it used back into `still.env.local`, so a later run — or an upgrade —
+rebuilds the same drop-in instead of reverting a customised value to the default. That
+recording also means the mode-derived service-name default applies on *first* enable:
+a node that later changes `STILL_MODE` keeps its recorded name until you pass
+`STILL_OTLP_SERVICE_NAME` explicitly. Values must not contain whitespace or quotes
+(they're written unquoted into an env file):
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `STILL_OTLP_ENDPOINT` | `http://127.0.0.1:4318` | Base URL — the exporter appends `/v1/traces` itself. Prefer the literal `127.0.0.1` over `localhost`, which can resolve to `::1` and miss a receiver bound only to IPv4. |
+| `STILL_OTLP_PROTOCOL` | `http/protobuf` | Caddy's own default is gRPC on `4317`, and many collectors only open the HTTP receiver on `4318` — which is why Still defaults to HTTP instead of inheriting Caddy's default. Set `grpc` with a `:4317` endpoint if that's what your collector opens. |
+| `STILL_OTLP_RESOURCE_ATTRIBUTES` | unset | Comma-separated OpenTelemetry resource attributes for Caddy's spans, e.g. `deployment.environment=production`. Usually unnecessary: collectors generally stamp what they know — environment, host — onto telemetry that doesn't declare it. Set it when yours doesn't, so Caddy's spans don't end up in a different environment from your application's in the same trace. |
+| `STILL_OTLP_SERVICE_NAME` | `caddy-ingress` in controller mode, `caddy` otherwise | A controller's Caddy only fronts ingress to agents; an agent's or standalone's serves the application itself, so the two proxy hops of a multi-node trace read apart as services instead of only by host tag. One service per role, not per machine — which node a span came from is a host concern, and your collector already tags that. |
+
+One thing to expect: external uptime probes hitting an application's domain are
+proxied requests like any other, so they produce spans. Filter them at the collector
+by request path if you don't want them — and remember each node exports to its own
+collector, so that rule belongs on every node. Caddy's *active health checks* are the
+exception: the health checker probes the upstream directly, outside the route chain
+where the tracing handler sits, so they never produce Caddy spans. (An instrumented
+application will still record its own spans for health requests that reach it — filter
+those on the application's side if needed.)
+
+**Applying it to routes that already exist.** The handler is part of the route JSON
+Still writes, so a route only picks it up when it's next written. In controller mode,
+restarting Still re-emits its ingress routes (standalone has no ingress routes, so a
+restart there re-emits nothing). Application routes are written at deploy time, so
+they carry the change on the next deploy — or immediately, without deploying, from
+Still's own console on the controller or standalone box (`sudo /opt/still/bin/still
+remote`; this is Still's IEx, not the per-application browser console):
+
+```elixir
+Still.Applications.list_applications() |> Enum.each(&Still.Orchestrator.reconcile_app_routes/1)
+```
+
 ### Surviving restarts
 
 Still drives Caddy through its admin API, and Caddy autosaves every change. The
