@@ -197,11 +197,15 @@ defmodule Still.Caddy.ConfigTest do
     end
 
     test "rejects a blank span" do
-      assert_raise FunctionClauseError, fn -> Config.tracing(span: "") end
+      assert_raise ArgumentError, fn -> Config.tracing(span: "") end
     end
 
     test "rejects a non-binary span" do
-      assert_raise FunctionClauseError, fn -> Config.tracing(span: :api) end
+      assert_raise ArgumentError, fn -> Config.tracing(span: :api) end
+    end
+
+    test "requires :span" do
+      assert_raise KeyError, fn -> Config.tracing(span_attributes: %{"http.route" => "x"}) end
     end
 
     test "emits span_attributes when given" do
@@ -213,8 +217,13 @@ defmodule Still.Caddy.ConfigTest do
                }
     end
 
+    test "accepts options in any order" do
+      assert Config.tracing(span_attributes: %{"http.route" => "my-api"}, span: "my-api") ==
+               Config.tracing(span: "my-api", span_attributes: %{"http.route" => "my-api"})
+    end
+
     test "rejects an empty span_attributes map" do
-      assert_raise FunctionClauseError, fn ->
+      assert_raise ArgumentError, fn ->
         Config.tracing(span: "my-api", span_attributes: %{})
       end
     end

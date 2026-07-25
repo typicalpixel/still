@@ -161,16 +161,21 @@ defmodule Still.Caddy.Config do
   configured with the standard `OTEL_*` environment variables on the Caddy
   process, not here.
   """
-  def tracing(span: span) when is_binary(span) and span != "" do
+  def tracing(opts) when is_list(opts) do
+    span = Keyword.fetch!(opts, :span)
+    attrs = Keyword.get(opts, :span_attributes)
+
+    unless is_binary(span) and span != "" do
+      raise ArgumentError, "tracing :span must be a non-empty string"
+    end
+
     %{"handler" => "tracing", "span" => span}
+    |> maybe_put("span_attributes", span_attributes!(attrs))
   end
 
-  def tracing(span: span, span_attributes: attrs)
-      when is_binary(span) and span != "" and is_map(attrs) and map_size(attrs) > 0 do
-    %{"handler" => "tracing", "span" => span, "span_attributes" => span_attributes!(attrs)}
-  end
+  defp span_attributes!(nil), do: nil
 
-  defp span_attributes!(attrs) do
+  defp span_attributes!(%{} = attrs) when map_size(attrs) > 0 do
     Enum.each(attrs, fn {key, value} ->
       unless is_binary(key) and key != "" and is_binary(value) and value != "" do
         raise ArgumentError, "tracing :span_attributes must be a map of non-empty strings"
@@ -183,6 +188,11 @@ defmodule Still.Caddy.Config do
     end)
 
     attrs
+  end
+
+  defp span_attributes!(other) do
+    raise ArgumentError,
+          "tracing :span_attributes must be a non-empty map, got: #{inspect(other)}"
   end
 
   @doc """
