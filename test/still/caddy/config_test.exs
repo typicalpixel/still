@@ -149,6 +149,35 @@ defmodule Still.Caddy.ConfigTest do
       refute Map.has_key?(Config.reverse_proxy(dial: "localhost:4000"), "health_checks")
     end
 
+    test "probe carries Host and X-Forwarded-Proto headers when :host and :proto are given" do
+      handler =
+        Config.reverse_proxy(
+          dial: "localhost:4000",
+          health_check: %{
+            path: "/health",
+            interval_ms: 10_000,
+            deadline_ms: 5_000,
+            host: "api.example.com",
+            proto: "https"
+          }
+        )
+
+      assert handler["health_checks"]["active"]["headers"] == %{
+               "Host" => ["api.example.com"],
+               "X-Forwarded-Proto" => ["https"]
+             }
+    end
+
+    test "omits probe headers when :host and :proto are absent" do
+      handler =
+        Config.reverse_proxy(
+          dial: "localhost:4000",
+          health_check: %{path: "/health", interval_ms: 10_000, deadline_ms: 5_000}
+        )
+
+      refute Map.has_key?(handler["health_checks"]["active"], "headers")
+    end
+
     test "rejects empty :dial" do
       assert_raise ArgumentError, fn -> Config.reverse_proxy(dial: "") end
     end

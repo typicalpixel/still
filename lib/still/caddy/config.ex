@@ -85,10 +85,13 @@ defmodule Still.Caddy.Config do
     * `:dials` — a non-empty list of `host:port` upstreams. Exactly one
       of `:dial` or `:dials` must be given.
     * `:health_check` — optional active health check map
-      `%{path: "/health", interval_ms: 10_000, deadline_ms: 5_000}`.
-      Caddy runs these out-of-band and takes unhealthy upstreams out
-      of rotation automatically; skip it for apps without a health
-      endpoint (e.g. static_sites).
+      `%{path: "/health", interval_ms: 10_000, deadline_ms: 5_000}`,
+      plus optional probe headers: `:host` is sent as the `Host` header
+      (without it Caddy sends the upstream's dial address, which on a
+      host-routed upstream hits the wrong route entirely) and `:proto`
+      as `X-Forwarded-Proto`. Caddy runs these out-of-band and takes
+      unhealthy upstreams out of rotation automatically; skip it for
+      apps without a health endpoint (e.g. static_sites).
     * `:lb_policy` — optional upstream selection policy atom. One of
       `:random`, `:round_robin`, `:ip_hash`, `:cookie`, `:first`,
       `:least_conn`, `:header`, `:uri_hash`. Omitted means Caddy's
@@ -143,14 +146,28 @@ defmodule Still.Caddy.Config do
     end
   end
 
-  defp active_health_check(%{path: path, interval_ms: interval_ms, deadline_ms: deadline_ms})
+  defp active_health_check(%{path: path, interval_ms: interval_ms, deadline_ms: deadline_ms} = hc)
        when is_binary(path) and is_integer(interval_ms) and is_integer(deadline_ms) do
     %{
       "uri" => path,
       "interval" => "#{interval_ms}ms",
       "timeout" => "#{deadline_ms}ms"
     }
+    |> maybe_put("headers", health_check_headers(hc))
   end
+
+  defp health_check_headers(hc) do
+    %{}
+    |> maybe_put("Host", header_value(Map.get(hc, :host)))
+    |> maybe_put("X-Forwarded-Proto", header_value(Map.get(hc, :proto)))
+    |> case do
+      empty when map_size(empty) == 0 -> nil
+      headers -> headers
+    end
+  end
+
+  defp header_value(value) when is_binary(value) and value != "", do: [value]
+  defp header_value(_), do: nil
 
   @doc """
   Builds a `tracing` handler map. Caddy opens a span named `span` for the

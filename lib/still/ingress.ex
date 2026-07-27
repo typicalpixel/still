@@ -57,6 +57,8 @@ defmodule Still.Ingress do
       the configured `:ingress_edge_port`. Active health checks are
       attached when the application defines a health_check, so Caddy
       takes unresponsive agents out of rotation without help from Still.
+      Probes carry the application's domain as their `Host` header so
+      they traverse the agent's host-routed Caddy to the app itself.
     * `terminal` — true, so one matched ingress route stops
       evaluation.
 
@@ -114,11 +116,18 @@ defmodule Still.Ingress do
 
   defp maybe_put_health_check(opts, %{health_check: nil}), do: opts
 
-  defp maybe_put_health_check(opts, %{health_check: hc}) do
+  # `host:` makes the probe traverse the agent's host-routed Caddy to the
+  # app; `proto: "https"` advertises the edge scheme so force-ssl apps
+  # answer 200 instead of redirecting. The proto header only survives on
+  # agents that list the controller in trusted_proxies — elsewhere Caddy
+  # strips it, which is today's behavior.
+  defp maybe_put_health_check(opts, %{health_check: hc} = app) do
     Keyword.put(opts, :health_check, %{
       path: hc.path,
       interval_ms: hc.interval_ms,
-      deadline_ms: hc.deadline_ms
+      deadline_ms: hc.deadline_ms,
+      host: app.domain,
+      proto: "https"
     })
   end
 

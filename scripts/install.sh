@@ -45,6 +45,13 @@
 #   STILL_INGRESS_EDGE_PORT    controller only. Port the controller's ingress
 #                              Caddy dials on each agent (default: 8080).
 #                              Must match the agents' STILL_CADDY_HTTP_PORT.
+#   STILL_TRUSTED_PROXIES      comma-separated IPs/CIDRs this node's Caddy
+#                              trusts as upstream proxies, so their
+#                              X-Forwarded-* headers pass through to apps.
+#                              Agents default to the controller's address
+#                              (from STILL_CONTROLLER_NODE) when it is an
+#                              IP literal; set explicitly otherwise. Empty
+#                              string removes a previously set value.
 #   STILL_CADDY_TRACING        1 to turn on OpenTelemetry request tracing for
 #                              this node's applications, 0 to turn it off.
 #                              Unset leaves whatever's already configured
@@ -631,6 +638,10 @@ systemctl daemon-reload
 #   @id still_controller → host-matched, all paths → localhost:$PORT
 #   @id still_catchall   → any unmatched host       → 200 "Still" page
 #
+# Agent nodes get no controller route (nothing listens on $PORT there, and a
+# route host-matched to the agent's own address would swallow the ingress
+# health probes); a stale one from an earlier install is dropped on reconcile.
+#
 # The JSON shape is built by Still.CaddyBootstrap so it lives in one place
 # and can be unit-tested. We shell out to `still eval` because the release
 # is already on disk by the time this block runs.
@@ -672,6 +683,27 @@ else
 fi
 tls_literal=":${STILL_CONTROLLER_TLS}"
 
+# Trusted upstream proxies. Agents default to the controller's address so
+# X-Forwarded-* headers survive the ingress hop; derived only when
+# STILL_CONTROLLER_NODE is an IP literal — set STILL_TRUSTED_PROXIES
+# explicitly otherwise. Unset → leave existing config alone (nil);
+# empty → remove (Elixir []).
+if [ -z "${STILL_TRUSTED_PROXIES+x}" ] && [ "$STILL_MODE" = "agent" ]; then
+  _controller_host="${STILL_CONTROLLER_NODE#*@}"
+  case "$_controller_host" in
+    *[!0-9.]*) : ;;
+    *) STILL_TRUSTED_PROXIES="$_controller_host/32" ;;
+  esac
+fi
+
+if [ -z "${STILL_TRUSTED_PROXIES+x}" ]; then
+  proxies_literal="nil"
+elif [ -z "$STILL_TRUSTED_PROXIES" ]; then
+  proxies_literal="[]"
+else
+  proxies_literal="[\"$(printf '%s' "$STILL_TRUSTED_PROXIES" | sed 's/,/", "/g')\"]"
+fi
+
 if [ -z "${STILL_SKIP_CADDY_SETUP:-}" ]; then
   say "Reconciling Caddy base config (set STILL_SKIP_CADDY_SETUP=1 to skip)"
 
@@ -685,11 +717,13 @@ if [ -z "${STILL_SKIP_CADDY_SETUP:-}" ]; then
   # whole thing back via load_config. Single admin-API round trip.
   "$STILL_PREFIX/bin/still" eval "
     Still.Release.caddy_reconcile(
+      mode: :$STILL_MODE,
       backend: \"$STILL_BACKEND\",
       http_port: $STILL_CADDY_HTTP_PORT,
       controller_domain: $domain_literal,
       fallback_host: \"$STILL_NODE_HOST\",
       tls_mode: $tls_literal,
+      trusted_proxies: $proxies_literal,
       internal_port: ${STILL_INTERNAL_PORT:-9090},
       artifacts_dir: \"$STILL_VAR/artifacts\"
     )

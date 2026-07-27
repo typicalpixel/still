@@ -84,8 +84,9 @@ defmodule Still.CaddyBootstrap do
   routes in the current config are preserved; the system routes are
   replaced in place. Any other fields on the still server
   (`automatic_https`, `tls_connection_policies`, etc.) are preserved
-  — we only overwrite `listen` and `routes`, and remove the deprecated
-  per-server `metrics` field. Unrelated top-level keys (`admin`) and
+  — we only overwrite `listen`, `routes`, and (when `:trusted_proxies`
+  is given) `trusted_proxies`, and remove the deprecated per-server
+  `metrics` field. Unrelated top-level keys (`admin`) and
   other HTTP servers are untouched.
 
   The one exception: the OS Caddy package's default welcome-page server
@@ -112,6 +113,7 @@ defmodule Still.CaddyBootstrap do
     artifacts_dir = Keyword.get(opts, :artifacts_dir, artifacts_dir_default())
 
     tls_mode = Keyword.get(opts, :tls_mode, :off)
+    trusted_proxies = Keyword.get(opts, :trusted_proxies)
 
     owned_ports = listen_ports(new_listen ++ [":#{internal_port}"])
 
@@ -124,6 +126,7 @@ defmodule Still.CaddyBootstrap do
       |> Map.put("routes", new_routes)
       |> Map.delete("metrics")
       |> apply_automatic_https(tls_mode)
+      |> apply_trusted_proxies(trusted_proxies)
     end)
     |> put_in(
       ["apps", "http", "servers", "still_internal"],
@@ -217,6 +220,18 @@ defmodule Still.CaddyBootstrap do
     Map.delete(server, "automatic_https")
   end
 
+  # X-Forwarded-* headers only survive a proxy hop when the sender is a
+  # trusted proxy of this server. On agents that sender is the controller's
+  # ingress Caddy — without this, every app behind a multi-node ingress sees
+  # X-Forwarded-Proto: http and force-ssl apps redirect-loop. nil leaves any
+  # operator-managed setting alone; [] removes ours.
+  defp apply_trusted_proxies(server, nil), do: server
+  defp apply_trusted_proxies(server, []), do: Map.delete(server, "trusted_proxies")
+
+  defp apply_trusted_proxies(server, ranges) when is_list(ranges) do
+    Map.put(server, "trusted_proxies", %{"source" => "static", "ranges" => ranges})
+  end
+
   # Caddy 2.11 deprecates per-server metrics; app-level metrics applies to
   # all HTTP servers. `per_host` labels counters with the matched host, which
   # maps 1:1 to `application.domain`. `observe_catchall_hosts` stays off: it
@@ -261,10 +276,21 @@ defmodule Still.CaddyBootstrap do
   Returns the system route list: a single host-scoped route that proxies
   the whole controller host to Phoenix. The catch-all is appended
   separately (see `with_catchall_last/1`) so it always stays last.
+
+  Under `mode: :agent` the list is empty — no Phoenix listens behind an
+  agent's Caddy, and a controller route host-matched to the agent's own
+  address would swallow the ingress health probes (which arrive with the
+  dial address as `Host`) and 502 them. A stale controller route from an
+  earlier install is dropped on reconcile, since it is a system route
+  that is no longer re-added.
   """
   def system_route_list(opts) when is_list(opts) do
-    backend = Keyword.fetch!(opts, :backend)
-    [controller_route(backend, controller_host(opts))]
+    if Keyword.get(opts, :mode) == :agent do
+      []
+    else
+      backend = Keyword.fetch!(opts, :backend)
+      [controller_route(backend, controller_host(opts))]
+    end
   end
 
   @doc """

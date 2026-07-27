@@ -50,6 +50,7 @@ defmodule Still.Release do
   """
   def create_admin_user do
     load_app()
+    ensure_pubsub_started()
 
     {:ok, _, _} =
       Ecto.Migrator.with_repo(Still.Repo, fn _repo ->
