@@ -164,7 +164,11 @@ defmodule Still.IngressTest do
                "active" => %{
                  "uri" => "/healthz",
                  "interval" => "10000ms",
-                 "timeout" => "2000ms"
+                 "timeout" => "2000ms",
+                 "headers" => %{
+                   "Host" => ["api.example.com"],
+                   "X-Forwarded-Proto" => ["https"]
+                 }
                }
              }
     end

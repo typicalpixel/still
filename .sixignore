@@ -27,7 +27,7 @@ lib/still/dev/maple_demo.ex c8d33e7d
 lib/still/dev/standalone.ex ed8fd291
 lib/still/orchestrator.ex b451d0ad
 lib/still/orchestrator.ex execute_rolling_deploy 01165896
-lib/still/release.ex b61e7447
+lib/still/release.ex ffdf8da5
 test/support/integration_case.ex ba10ede1
 test/support/integration_fixtures.ex 7e5e5325
 test/support/recording_server.ex 0fcb583c

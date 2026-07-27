@@ -499,6 +499,63 @@ defmodule Still.CaddyBootstrapTest do
       [route] = CaddyBootstrap.system_route_list(backend: "localhost:4000")
       refute Map.has_key?(route, "match")
     end
+
+    test "returns no routes in agent mode" do
+      assert CaddyBootstrap.system_route_list(mode: :agent) == []
+    end
+  end
+
+  describe "rebuild/2 — agent mode" do
+    test "writes no controller route, only app routes and the catch-all" do
+      current = still_with_routes([app_route("still_app_a", "a.test")])
+      server = still(CaddyBootstrap.rebuild(current, base_opts(mode: :agent)))
+      assert route_ids(server) == ["still_app_a", "still_catchall"]
+    end
+
+    test "drops a stale controller route from an earlier install" do
+      current =
+        still_with_routes([
+          %{
+            "@id" => "still_controller",
+            "match" => [%{"host" => ["10.0.0.9"]}],
+            "handle" => [%{"handler" => "reverse_proxy"}]
+          },
+          app_route("still_app_a", "a.test")
+        ])
+
+      server = still(CaddyBootstrap.rebuild(current, base_opts(mode: :agent)))
+      assert route_ids(server) == ["still_app_a", "still_catchall"]
+    end
+  end
+
+  describe "rebuild/2 — trusted_proxies" do
+    defp still_with_trusted(ranges) do
+      %{
+        "apps" => %{
+          "http" => %{
+            "servers" => %{
+              "still" => %{"trusted_proxies" => %{"source" => "static", "ranges" => ranges}}
+            }
+          }
+        }
+      }
+    end
+
+    test "sets a static trusted_proxies module when given" do
+      server = still(CaddyBootstrap.rebuild(%{}, base_opts(trusted_proxies: ["10.0.0.1/32"])))
+      assert server["trusted_proxies"] == %{"source" => "static", "ranges" => ["10.0.0.1/32"]}
+    end
+
+    test "leaves an existing trusted_proxies alone when the option is absent" do
+      server = still(CaddyBootstrap.rebuild(still_with_trusted(["10.9.9.9/32"]), base_opts()))
+      assert server["trusted_proxies"] == %{"source" => "static", "ranges" => ["10.9.9.9/32"]}
+    end
+
+    test "removes trusted_proxies when given an empty list" do
+      current = still_with_trusted(["10.9.9.9/32"])
+      server = still(CaddyBootstrap.rebuild(current, base_opts(trusted_proxies: [])))
+      refute Map.has_key?(server, "trusted_proxies")
+    end
   end
 
   describe "listen/1" do
