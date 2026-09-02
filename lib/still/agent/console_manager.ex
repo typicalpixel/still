@@ -354,7 +354,7 @@ defmodule Still.Agent.ConsoleManager do
 
     {chunk, rest} =
       case buffer do
-        <<chunk::binary-size(allowance), rest::binary>> -> {chunk, rest}
+        <<chunk::binary-size(^allowance), rest::binary>> -> {chunk, rest}
         _ -> {buffer, ""}
       end
 

@@ -17,7 +17,9 @@ defmodule StillWeb.Plugs.AuthorizeTest do
     end
 
     test "raises on an unsupported permission" do
-      assert_raise FunctionClauseError, fn -> Authorize.init(:superuser) end
+      # apply/3 keeps the deliberately-invalid argument out of the type checker
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      assert_raise FunctionClauseError, fn -> apply(Authorize, :init, [:superuser]) end
     end
   end
 

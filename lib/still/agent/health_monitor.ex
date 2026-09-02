@@ -16,8 +16,6 @@ defmodule Still.Agent.HealthMonitor do
 
   use GenServer
 
-  require Logger
-
   @doc """
   Starts the HealthMonitor and registers it under the module name.
 
