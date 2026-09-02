@@ -296,7 +296,9 @@ defmodule Still.Caddy.ConfigTest do
     end
 
     test "subroute rejects empty route list" do
-      assert_raise FunctionClauseError, fn -> Config.subroute(routes: []) end
+      # apply/3 keeps the deliberately-invalid argument out of the type checker
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      assert_raise FunctionClauseError, fn -> apply(Config, :subroute, [[routes: []]]) end
     end
   end
 

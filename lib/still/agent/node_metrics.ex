@@ -12,8 +12,6 @@ defmodule Still.Agent.NodeMetrics do
 
   use GenServer
 
-  require Logger
-
   @default_interval_ms 10_000
 
   @doc """

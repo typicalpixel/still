@@ -183,8 +183,6 @@ defmodule Still.Credo.PublicFunctionArgumentPatterns do
     end
   end
 
-  # six:ignore:next
-  defp check_params_for_patterns(nil, _meta, _issue_meta, _opts), do: []
   defp check_params_for_patterns([], _meta, _issue_meta, _opts), do: []
 
   defp check_params_for_patterns(params, meta, issue_meta, opts) do
